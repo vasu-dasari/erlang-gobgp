@@ -63,7 +63,7 @@ neighbor(Op, Ip, AsNumber) ->
     ?call({neighbor, Op, Ip, AsNumber}).
 
 demo() ->
-    ?INFO("server(set, 172.30.0.2, 50051) => ~n~p", [server(set, "172.30.0.2", 50051)]),
+    ?INFO("server(set, localhost, 50051) => ~n~p", [server(set, "localhost", 50051)]),
     ?INFO("router_id(start, <<10.0.123.100>>, 65001) => ~n~p", [router_id(start, <<"10.0.123.110">>, 65001)]),
     ?INFO("router_id(get, 0,0) => ~n~p", [router_id(get, 0,0)]),
     ?INFO("neighbor(add, <<10.0.123.200>>, 65002) => ~n~p", [neighbor(add, <<"10.0.123.200">>, 65002)]),
