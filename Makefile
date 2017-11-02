@@ -8,7 +8,7 @@ $(error "Docker not available on this system")
 endif
 
 DOCKER_IMAGE := erlang_gobgp
-DOCKER_RUN := $(DOCKER) run -d -i --name $(DOCKER_IMAGE) \
+DOCKER_RUN := $(DOCKER) run -d -it --name $(DOCKER_IMAGE) \
 		-v $(shell pwd):$(shell pwd) -w $(shell pwd)
 DOCKER_EXEC := $(DOCKER) exec -it $(DOCKER_IMAGE) bash -c 
 DOCKER_EXEC_ARGS=cd $(shell pwd) &&
