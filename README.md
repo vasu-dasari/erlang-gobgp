@@ -1,21 +1,13 @@
-gobgp
-=====
-
+# erlang-gobgp
 This is a library, which can be a wrapper for gobgp and an interface for Erlang based applications to be able act as BGP routers. This library uses GoBGP APIs defined in gobgp.proto and GRPC for communication with gobgp.
-
 Goal of this library is to provide
-1. a minimal set of functions via API and absorb the complexity of configuring BGP.
-2. Provide a set of APIs to be able to configure EVPN in GoBGP. 
+* A  minimal set of functions via API and absorb the complexity of configuring BGP.
+* Provide a set of APIs to be able to configure EVPN in GoBGP. 
 
-TODO
-----
+## TODO
 Add NIFs to serialize calls to gobgp to be able advertise EVPN routes
-
-
-Build
------
-To be able to build this project and test drive one needs to have docker installed on their host machine. The build process will create a docker container based on a image vdasari/erlango from Docker hub. This Docker image contains Erlang 20.3 OTP and golang 1.9.2.  
-
+## Build
+To be able to build this project and test drive one needs to have docker installed on their host machine. The build process will create a docker container based on a image vdasari/erlango from Docker hub. This Docker image contains Erlang 20.3 OTP and golang 1.9.2.
 To compile and execute the application, just do 'make run'. This will 
 1. Download the docker image onto your local machine
 2. Starts the container "gobgp" 
@@ -23,14 +15,14 @@ To compile and execute the application, just do 'make run'. This will
 4. Launches erlang shell
 
 Once Erlang shell appears, one can call bgp_api:demo() which is a test driving function to be able to:
-1. Connect to gobgp daemon running on local container.
-2. Start the router id.
-3. Add a neighbor.
-4. Get current neighbor list.
-5. Delete a neighbor.
+* Connect to gobgp daemon running on local container.
+* Start the router id.
+* Add a neighbor.
+* Get current neighbor list.
+* Delete a neighbor.
 
-Erlang Screenhot
-----------------
+## Erlang Screenhot
+```
 $ make run
 (gobgp@258a817c534e)1> bgp_api:demo().
 
@@ -100,11 +92,10 @@ ok
               {'AddPaths',{'AddPathsConfig',false,0},undefined}}],
          {'AddPaths',{'AddPathsConfig',false,0},undefined}}]}
 ok
-
-GoBGP Screenshot
-----------------
+```
+## GoBGP Screenshot
 Launch bash shell to the container by doing make shell from any window. One can see that gobgp is configured with the parameters configured via bgp_api:demo().
-
+```
 $ make shell
 root@4c66c9f6474c:~# gobgp global
 AS:        65001
@@ -140,3 +131,4 @@ BGP neighbor is 10.0.123.200, remote AS 65002
     Received:               0
     Accepted:               0
 root@4c66c9f6474c:~#
+```
