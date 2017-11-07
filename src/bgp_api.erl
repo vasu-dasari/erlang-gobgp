@@ -155,11 +155,19 @@ process_cast(Request, State) ->
     ?INFO("cast: Request~n~p", [Request]),
     {noreply, State}.
 
-process_info_msg({'EXIT',_,normal}, State) ->
+process_info_msg({'EXIT',_,normal} = Request, State) ->
     {noreply, State};
 process_info_msg({init}, State) ->
+    process_flag(trap_exit, true),
     ets:new(?EtsConfig,[named_table, {keypos, 2}, ordered_set, public]),
     {noreply, State};
+
+process_info_msg(retry_connection, #state{ip_address = Ip, port_number = PortNumer} = State) ->
+    {ok, NewState} = do_server(set, Ip, PortNumer, State),
+    {noreply, NewState};
+
+process_info_msg({'EXIT',_,closed_by_peer} = Request, #state{connection_timer_ref = TimerRef} = State) ->
+    {noreply, State#state{connection = not_connected, connection_timer_ref = restart_timer(TimerRef)}};
 
 process_info_msg(Request, State) ->
     ?INFO("info: Request~n~p", [Request]),
@@ -171,7 +179,7 @@ process_info_msg(Request, State) ->
 
 do_server(get, _, _, #state{ip_address = OldIp, port_number = OldPort, connection = Connection} = State) ->
     {{OldIp, OldPort, Connection}, State};
-do_server(set, Ip, PortNumer, #state{ip_address = OldIp, port_number = OldPort} = State) when Ip == OldIp,PortNumer == OldPort ->
+do_server(set, Ip, PortNumer, #state{ip_address = OldIp, port_number = OldPort, connection = Connection} = State) when Ip == OldIp,PortNumer == OldPort,Connection /= not_connected->
     {ok, State};
 
 do_server(Op, Ip, PortNumer, #state{connection = Connection} = State) when Connection /= not_connected ->
@@ -227,8 +235,10 @@ do_neighbor(delete, Ip, AsNumber, #state{connection = not_connected} = State) ->
     ets:delete(?EtsConfig, #neighbor_key_t{ip_address = Ip, as_number = AsNumber}),
     {not_connected, State};
 do_neighbor(add, Ip, AsNumber, #state{connection = Connection} = State) ->
+    {ok,RouteFamily} = gobgp_nif:route_family("l2vpn-evpn"),
     Request = #'AddNeighborRequest'{
         peer = #'Peer'{
+            families = [RouteFamily],
             conf = #'PeerConf'{
                 neighbor_address = Ip,
                 peer_as = AsNumber

@@ -9,7 +9,7 @@ endif
 
 DOCKER_IMAGE := erlang_gobgp
 DOCKER_RUN := $(DOCKER) run -d -it --name $(DOCKER_IMAGE) \
-		-v $(shell pwd):$(shell pwd) -w $(shell pwd)
+		-v $(HOME):$(HOME) -w $(shell pwd)
 DOCKER_EXEC := $(DOCKER) exec -it $(DOCKER_IMAGE) bash -c 
 DOCKER_EXEC_ARGS=cd $(shell pwd) &&
 DOCKER_REBAR := $(DOCKER_EXEC_ARGS) $(REBAR)
@@ -23,7 +23,7 @@ container:
 ifneq ($(shell $(DOCKER) ps -f name=$(DOCKER_IMAGE) | grep Up > /dev/null; echo $$?),0)
 	 @$(shell $(DOCKER) stop $(DOCKER_IMAGE) &> /dev/null)
 	 @$(shell $(DOCKER) rm $(DOCKER_IMAGE) &> /dev/null)
-	 @$(DOCKER_RUN) vdasari/erlango /bin/bash
+	 @$(DOCKER_RUN) vdasari/erlango
 endif
 
 container-clean:
@@ -48,6 +48,9 @@ shell: container
 	@$(DOCKER_EXEC) "$(DOCKER_EXEC_ARGS) bash"
 
 run: compile
+ifneq ($(shell ps -aef | grep gobgpd | grep -v grep &> /dev/null; echo $$?),0)
+	/go/bin/gobgpd --syslog &
+endif
 	@$(DOCKER_EXEC) "$(DOCKER_EXEC_ARGS) $(SHELL_ARGS)"
 
 .SILENT:
