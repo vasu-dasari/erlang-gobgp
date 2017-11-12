@@ -17,3 +17,6 @@ _build
 *.iml
 rebar3.crashdump
 rebar.lock
+scratch
+priv
+c_src/*pb.h

@@ -10,8 +10,9 @@
 -author("vdasari").
 
 %% API
--export([route_family/1, reload_nif/0]).
--export([command/1, init/0]).
+-export([init/0, reload_nif/0]).
+-export([route_family/1, route/3]).
+
 -on_load(init/0).
 
 -include("logger.hrl").
@@ -21,7 +22,7 @@
 
 %% NIF Calls
 route_family(_) -> not_loaded(?LINE).
-command(_) -> not_loaded(?LINE).
+route(_,_,_) -> not_loaded(?LINE).
 
 init() ->
     {ok,LibFile} = application:get_env(?APPNAME, libgobgp),

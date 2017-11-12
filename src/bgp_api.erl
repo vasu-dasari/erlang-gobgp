@@ -6,6 +6,7 @@
 %%% @end
 %%% Created : 23. Oct 2017 3:38 PM
 %%%-------------------------------------------------------------------
+
 -module(bgp_api).
 -author("vdasari").
 
@@ -19,12 +20,12 @@
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
--export([server/3, router_id/3, neighbor/3, demo/0, pretty_print/1]).
+-export([server/3, router_id/3, neighbor/3, demo/0, pretty_print/1, route/2, route_reflector/2]).
 -define(SERVER, ?MODULE).
 -define(EtsConfig, bgp_ets_config).
 
 -record(state, {
-    ip_address = 0,
+    ip_address = "localhost",
     port_number = 50051,
     connection = not_connected,
     
@@ -61,6 +62,31 @@ router_id(Op, RouterId, AsNumber) ->
 
 neighbor(Op, Ip, AsNumber) ->
     ?call({neighbor, Op, Ip, AsNumber}).
+
+route_reflector(_Op, _IpAddress) ->
+    ok.
+
+-record(route_entry_t, {
+    type            :: macadv,
+    ip_address      :: non_neg_integer() | binary() | iolist(),
+    mac_address     :: binary() | iolist(),
+    service_id      :: non_neg_integer(),
+    rd              :: binary() | iolist(),
+    rt              :: binary() | iolist(),
+    encap           :: mim | vxlan
+}).
+
+route(Op, RouteEntry) ->
+    {Family, NifStr} = route2nif(RouteEntry),
+    ?cast({route, Op, Family, NifStr}).
+
+route2nif(
+        #route_entry_t{
+            type = macadv
+        }) ->
+    {"l2vpn-evpn", "macadv aa:bb:cc:dd:ee:04 2.2.2.4 1 1 rd 64512:10 rt 64512:10 encap vxlan"};
+route2nif(_RouteEntry) ->
+    {"l2vpn-evpn", "macadv aa:bb:cc:dd:ee:04 2.2.2.4 1 1 rd 64512:10 rt 64512:10 encap vxlan"}.
 
 demo() ->
     ?INFO("server(set, localhost, 50051) => ~n~p", [server(set, "localhost", 50051)]),
@@ -151,11 +177,15 @@ process_call(Request, State) ->
     ?INFO("call: Unhandled Request ~p", [Request]),
     {reply, ok, State}.
 
+process_cast({route, Op, Family, NifStr}, State) ->
+    ?INFO("nif: Family ~p, Command ~p", [Family, NifStr]),
+    gobgp_nif:route(Op, Family, NifStr),
+    {noreply, State};
 process_cast(Request, State) ->
     ?INFO("cast: Request~n~p", [Request]),
     {noreply, State}.
 
-process_info_msg({'EXIT',_,normal} = Request, State) ->
+process_info_msg({'EXIT',_,normal}, State) ->
     {noreply, State};
 process_info_msg({init}, State) ->
     process_flag(trap_exit, true),
@@ -166,7 +196,7 @@ process_info_msg(retry_connection, #state{ip_address = Ip, port_number = PortNum
     {ok, NewState} = do_server(set, Ip, PortNumer, State),
     {noreply, NewState};
 
-process_info_msg({'EXIT',_,closed_by_peer} = Request, #state{connection_timer_ref = TimerRef} = State) ->
+process_info_msg({'EXIT',_,closed_by_peer}, #state{connection_timer_ref = TimerRef} = State) ->
     {noreply, State#state{connection = not_connected, connection_timer_ref = restart_timer(TimerRef)}};
 
 process_info_msg(Request, State) ->
@@ -235,6 +265,7 @@ do_neighbor(delete, Ip, AsNumber, #state{connection = not_connected} = State) ->
     ets:delete(?EtsConfig, #neighbor_key_t{ip_address = Ip, as_number = AsNumber}),
     {not_connected, State};
 do_neighbor(add, Ip, AsNumber, #state{connection = Connection} = State) ->
+    [#router_id_t{router_id = RouterId}] = ets:lookup(?EtsConfig, router_id),
     {ok,RouteFamily} = gobgp_nif:route_family("l2vpn-evpn"),
     Request = #'AddNeighborRequest'{
         peer = #'Peer'{
@@ -242,6 +273,10 @@ do_neighbor(add, Ip, AsNumber, #state{connection = Connection} = State) ->
             conf = #'PeerConf'{
                 neighbor_address = Ip,
                 peer_as = AsNumber
+            },
+            route_reflector = #'RouteReflector'{
+                route_reflector_client = 1,
+                route_reflector_cluster_id = RouterId
             }
         }
     },
