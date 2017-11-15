@@ -73,7 +73,8 @@ class GoBgpClient {
       Delete = 2
     };
     std::string RouteAnnounce(RouteOp op,
-        const std::string& route_family, const std::string& route_descr);
+        const std::string& route_family, const std::string& route_descr,
+        std::string *serialize = NULL);
 
     // Functions imported from libgobgp.so file
     std::function<struct path_t*(int, char*)> serialize_path;

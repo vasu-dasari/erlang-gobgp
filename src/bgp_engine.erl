@@ -7,7 +7,7 @@
 %%% Created : 23. Oct 2017 3:38 PM
 %%%-------------------------------------------------------------------
 
--module(bgp_api).
+-module(bgp_engine).
 -author("vdasari").
 
 -behaviour(gen_server).
@@ -20,15 +20,17 @@
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
--export([server/3, router_id/3, neighbor/3, demo/0, pretty_print/1, route/2, route_reflector/2]).
+-export([start/3, stop/1]).
 -define(SERVER, ?MODULE).
--define(EtsConfig, bgp_ets_config).
+-define(EtsConfig, State#state.ets_name).
 
 -record(state, {
+    name,
+    ets_name,
     ip_address = "localhost",
     port_number = 50051,
     connection = not_connected,
-    
+
     connection_timer_ref
 }).
 
@@ -43,29 +45,6 @@
     as_number       :: non_neg_integer() | undefined
 }).
 
--record(neighbor_info_t, {
-    key
-}).
-
-%%%===================================================================
-%%% API
-%%%===================================================================
-
--define(cast(A),gen_server:cast(?MODULE, A)).
--define(call(A),gen_server:call(?MODULE, A)).
-
-server(Op, Ip, Port) ->
-    ?call({server, Op, Ip, Port}).
-
-router_id(Op, RouterId, AsNumber) ->
-    ?call({router_id, Op, RouterId, AsNumber}).
-
-neighbor(Op, Ip, AsNumber) ->
-    ?call({neighbor, Op, Ip, AsNumber}).
-
-route_reflector(_Op, _IpAddress) ->
-    ok.
-
 -record(route_entry_t, {
     type            :: macadv,
     ip_address      :: non_neg_integer() | binary() | iolist(),
@@ -76,27 +55,19 @@ route_reflector(_Op, _IpAddress) ->
     encap           :: mim | vxlan
 }).
 
-route(Op, RouteEntry) ->
-    {Family, NifStr} = route2nif(RouteEntry),
-    ?cast({route, Op, Family, NifStr}).
+-record(neighbor_info_t, {
+    key
+}).
 
-route2nif(
-        #route_entry_t{
-            type = macadv
-        }) ->
-    {"l2vpn-evpn", "macadv aa:bb:cc:dd:ee:04 2.2.2.4 1 1 rd 64512:10 rt 64512:10 encap vxlan"};
-route2nif(_RouteEntry) ->
-    {"l2vpn-evpn", "macadv aa:bb:cc:dd:ee:04 2.2.2.4 1 1 rd 64512:10 rt 64512:10 encap vxlan"}.
+%%%===================================================================
+%%% API
+%%%===================================================================
 
-demo() ->
-    ?INFO("server(set, localhost, 50051) => ~n~p", [server(set, "localhost", 50051)]),
-    ?INFO("router_id(start, <<10.0.123.100>>, 65001) => ~n~p", [router_id(start, <<"10.0.123.110">>, 65001)]),
-    ?INFO("router_id(get, 0,0) => ~n~p", [router_id(get, 0,0)]),
-    ?INFO("neighbor(add, <<10.0.123.200>>, 65002) => ~n~p", [neighbor(add, <<"10.0.123.200">>, 65002)]),
-    ?INFO("neighbor(delete, <<10.0.123.200>>, 65002) => ~n~p", [neighbor(delete, <<"10.0.123.200">>, 65002)]),
-    ?INFO("neighbor(get,0,0) => ~n~p", [neighbor(get,0,0)]),
-    ?INFO("neighbor(add, <<10.0.123.200>>, 65002) => ~n~p", [neighbor(add, <<"10.0.123.200">>, 65002)]),
-    ?INFO("neighbor(get,0,0) => ~n~s", [pretty_print(neighbor(get,0,0))]).
+start(Name, Ip, Port) ->
+    gen_server:start(?MODULE, {Name, Ip, Port}, []).
+
+stop(Pid) ->
+    gen_server:call(Pid, stop).
 
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
@@ -105,17 +76,24 @@ start_link() ->
 %%% gen_server callbacks
 %%%===================================================================
 
-init([]) ->
+init({Name, Ip, Port}) ->
+    EtsName = make_ets_name(Name),
+    ets:new(EtsName,[named_table, {keypos, 2}, ordered_set, public]),
     self() ! {init},
-    {ok, #state{}}.
+    {ok, #state{
+        name = Name,
+        ip_address = Ip,
+        port_number = Port,
+        ets_name = EtsName
+    }}.
 
 handle_call(Request, From, State) ->
     try process_call(Request, State) of
         {reply, ok, _} = Return ->
-            ?DEBUG("call: Request From ~p, Returns ~p~n~p", [From, ok, Request]),
+            ?DEBUG("call: Request From ~p, Returns ~p~n~p", [From, ok, Return]),
             Return;
         {reply, NotOk, _} = Return when is_atom(NotOk) ->
-            ?INFO("call: Request From ~p, Returns ~p~n~p", [From, NotOk, Request]),
+            ?DEBUG("call: Request From ~p, Returns ~p~n~p", [From, NotOk, Return]),
             Return;
         Return ->
             Return
@@ -123,7 +101,7 @@ handle_call(Request, From, State) ->
         Error:Reason ->
             StackTrace = erlang:get_stacktrace(),
             ?ERROR("Failed:~n    Request ~p~n    From ~p~n    Error ~p, Reason ~p~n    StackTrace ~n~s",
-                [Request, From, Error, Reason, pretty_print(StackTrace)]),
+                [Request, From, Error, Reason, bgp_utils:pretty_print(StackTrace)]),
             {reply, Error, State}
     end.
 
@@ -136,7 +114,7 @@ handle_cast(Request, State) ->
         Error:Reason ->
             StackTrace = erlang:get_stacktrace(),
             ?ERROR("Failed:~n    Request ~p~n    Error ~p, Reason ~p~n    StackTrace ~n~s",
-                [Request, Error, Reason, pretty_print(StackTrace)]),
+                [Request, Error, Reason, bgp_utils:pretty_print(StackTrace)]),
             {noreply, State}
     end.
 
@@ -149,7 +127,7 @@ handle_info(Info, State) ->
         Error:Reason ->
             StackTrace = erlang:get_stacktrace(),
             ?ERROR("Failed:~n    Request ~p~n    Error ~p, Reason ~p~n    StackTrace ~n~s",
-                [Info, Error, Reason, pretty_print(StackTrace)]),
+                [Info, Error, Reason, bgp_utils:pretty_print(StackTrace)]),
             {noreply, State}
     end.
 
@@ -163,9 +141,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-process_call({server,Op,Ip,PortNumer}, State) ->
-    {Return,NewState} = do_server(Op, Ip, PortNumer, State),
-    {reply, Return, NewState};
 process_call({router_id,Op,Ip,AsNumber}, State) ->
     {Return,NewState} = do_router_id(Op, Ip, AsNumber, State),
     {reply, Return, NewState};
@@ -177,9 +152,9 @@ process_call(Request, State) ->
     ?INFO("call: Unhandled Request ~p", [Request]),
     {reply, ok, State}.
 
-process_cast({route, Op, Family, NifStr}, State) ->
-    ?INFO("nif: Family ~p, Command ~p", [Family, NifStr]),
-    gobgp_nif:route(Op, Family, NifStr),
+process_cast({route, Op, RouteEntry}, State) ->
+    Ret = do_route(Op, RouteEntry, State),
+    ?INFO("Ret ~p", [Ret]),
     {noreply, State};
 process_cast(Request, State) ->
     ?INFO("cast: Request~n~p", [Request]),
@@ -187,18 +162,24 @@ process_cast(Request, State) ->
 
 process_info_msg({'EXIT',_,normal}, State) ->
     {noreply, State};
-process_info_msg({init}, State) ->
+process_info_msg({init},
+        #state{
+            ip_address = Ip,
+            port_number = Port
+        } = State) ->
     process_flag(trap_exit, true),
-    ets:new(?EtsConfig,[named_table, {keypos, 2}, ordered_set, public]),
-    {noreply, State};
+    {_,NewState} = do_server(set, Ip, Port, State),
+    {noreply, NewState};
 
 process_info_msg(retry_connection, #state{ip_address = Ip, port_number = PortNumer} = State) ->
     {ok, NewState} = do_server(set, Ip, PortNumer, State),
     {noreply, NewState};
 
 process_info_msg({'EXIT',_,closed_by_peer}, #state{connection_timer_ref = TimerRef} = State) ->
-    {noreply, State#state{connection = not_connected, connection_timer_ref = restart_timer(TimerRef)}};
+    {noreply, State#state{connection = not_connected, connection_timer_ref = bgp_utils:restart_timer(TimerRef)}};
 
+process_info_msg({'EXIT',_,normal}, State) ->
+    {noreply, State};
 process_info_msg(Request, State) ->
     ?INFO("info: Request~n~p", [Request]),
     {noreply, State}.
@@ -221,11 +202,12 @@ do_server(set, Ip, PortNumer, #state{connection_timer_ref = TimerRef} = State) -
         {ok,Connection} ->
             gobgp_client:'StopServer'(Connection, #'StopServerRequest'{}, [{msgs_as_records,gobgp_pb}]),
             {ok, State#state{
-                ip_address = Ip, port_number = PortNumer, connection = Connection, connection_timer_ref = cancel_timer(TimerRef)}
+                ip_address = Ip, port_number = PortNumer, connection = Connection,
+                connection_timer_ref = bgp_utils:cancel_timer(TimerRef)}
             };
         _ ->
             {ok, State#state{
-                ip_address = Ip,port_number = PortNumer, connection = not_connected, connection_timer_ref = restart_timer(TimerRef)
+                ip_address = Ip,port_number = PortNumer, connection = not_connected, connection_timer_ref = bgp_utils:restart_timer(TimerRef)
             }}
     end.
 
@@ -299,11 +281,32 @@ do_neighbor(delete, Ip, AsNumber, #state{connection = Connection} = State) ->
     ets:delete(?EtsConfig, #neighbor_key_t{ip_address = Ip, as_number = AsNumber}),
     {Result, State}.
 
-cancel_timer(undefined) -> undefined;
-cancel_timer(Ref)       -> erlang:cancel_timer(Ref), undefined.
-restart_timer(TimerRef) ->
-    cancel_timer(TimerRef),
-    erlang:send_after(5000, self(), retry_connection).
+make_ets_name(Name) when is_atom(Name) ->
+    erlang:list_to_atom("bgp_" ++ erlang:atom_to_list(Name));
+make_ets_name(Name) when is_list(Name) ->
+    erlang:list_to_atom("bgp_" ++ Name).
 
-pretty_print(Item) ->
-    io_lib:format("~s",[io_lib_pretty:print(Item)]).
+do_route(Op, RouteEntry, #state{connection = Connection}) ->
+    {Family, NifStr} = route2nif(RouteEntry),
+    ?INFO("nif: Family ~p, Command ~p", [Family, NifStr]),
+    {ok,EncodedBytes} = gobgp_nif:route(Op, Family, NifStr),
+    case Op of
+        add ->
+            Request = gobgp_pb:decode_msg(EncodedBytes, 'AddPathRequest'),
+            {ok, #{result := Result}} = gobgp_client:'AddPath'(Connection, Request, [{msgs_as_records, gobgp_pb}]),
+            Result;
+        delete ->
+            Request = gobgp_pb:decode_msg(EncodedBytes, 'DeletePathRequest'),
+            {ok, #{result := Result}} = gobgp_client:'DeletePath'(Connection, Request, [{msgs_as_records, gobgp_pb}]),
+            Result
+    end.
+
+route2nif(
+        #route_entry_t{
+            type = macadv
+        }) ->
+    {"l2vpn-evpn", "macadv aa:bb:cc:dd:ee:04 2.2.2.4 1 1 rd 64512:10 rt 64512:10 encap vxlan"};
+route2nif(_RouteEntry) ->
+    {"l2vpn-evpn", "macadv aa:bb:cc:dd:ee:04 2.2.2.4 1 1 rd 64512:10 rt 64512:10 encap vxlan"}.
+
+    

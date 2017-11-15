@@ -119,10 +119,25 @@ route_nif(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
   REALLOC(cmd, cmd.size+1);
   cmd.data[cmd.size-1] = '\0';
 
-  GoBgpClient::Self()->RouteAnnounce(OpCode,
-      (const char*)family.data, (char*)cmd.data);
+  std::string encoded_bytes;
+  std::string ret;
+  if ((ret = GoBgpClient::Self()->RouteAnnounce(OpCode,
+          (const char*)family.data, (char*)cmd.data, &encoded_bytes)) == "ok") {
 
-  return atom_ok;
+    ErlNifBinary buf = {0};
+
+    if (!enif_alloc_binary(encoded_bytes.length(), &buf))
+      return error_tuple(env, ENOMEM);
+    memcpy(buf.data, encoded_bytes.c_str(), encoded_bytes.length());
+
+    return enif_make_tuple2(env,
+        atom_ok,
+        enif_make_binary(env, &buf));
+  } else {
+    return enif_make_tuple2(env,
+        atom_error,
+        enif_make_string(env, ret.c_str(), ERL_NIF_LATIN1));
+  }
 }
 
   static ERL_NIF_TERM

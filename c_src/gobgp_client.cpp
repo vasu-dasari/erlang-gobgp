@@ -138,7 +138,8 @@ std::string GoBgpClient::GetNeighbor()
 }
 
 std::string GoBgpClient::RouteAnnounce(RouteOp Op,
-    const std::string& route_family, const std::string& route_descr_const)
+    const std::string& route_family, const std::string& route_descr_const,
+    std::string *serialize_buf)
 {
   std::string route_descr(route_descr_const);
 	path* path_c_struct = serialize_path(
@@ -166,32 +167,55 @@ std::string GoBgpClient::RouteAnnounce(RouteOp Op,
   current_path->set_nlri(path_c_struct->nlri.value, path_c_struct->nlri.len);
   current_path->set_family(get_route_family("ipv4-unicast"));
 
-  ClientContext context;
-  grpc::Status status;
+  if (serialize_buf) {
+    if (Op == RouteOp::Add) {
+      gobgpapi::AddPathRequest request;
+      gobgpapi::AddPathResponse response;
+      request.set_allocated_path(current_path);
 
-  if (Op == RouteOp::Add) {
-    gobgpapi::AddPathRequest request;
-    gobgpapi::AddPathResponse response;
-    request.set_allocated_path(current_path);
+      request.SerializeToString(serialize_buf);
+    } else {
+      gobgpapi::DeletePathRequest request;
+      gobgpapi::DeletePathResponse response;
+      request.set_allocated_path(current_path);
 
-    status = stub_->AddPath(&context, request, &response);
-  } else {
-    gobgpapi::DeletePathRequest request;
-    gobgpapi::DeletePathResponse response;
-    request.set_allocated_path(current_path);
-
-    status = stub_->DeletePath(&context, request, &response);
-  }
-
-	if (status.ok()) {
+      request.SerializeToString(serialize_buf);
+    }
     return std::string("ok");
-	} else {
-		std::stringstream buffer;
-		buffer
-			<< status.error_code() << "\n"
-			<< status.error_message() << "\n"
-			<< status.error_details() << "\n";
-		std::cout <<  buffer.str();
-    return buffer.str();
-	}
+
+  } else {
+    ClientContext context;
+    grpc::Status status;
+
+    if (Op == RouteOp::Add) {
+      gobgpapi::AddPathRequest request;
+      gobgpapi::AddPathResponse response;
+      request.set_allocated_path(current_path);
+
+      if(serialize_buf) {
+        request.SerializeToString(serialize_buf);
+      } else {
+        status = stub_->AddPath(&context, request, &response);
+      }
+    } else {
+      gobgpapi::DeletePathRequest request;
+      gobgpapi::DeletePathResponse response;
+      request.set_allocated_path(current_path);
+
+      status = stub_->DeletePath(&context, request, &response);
+    }
+
+    if (status.ok()) {
+      return std::string("ok");
+    } else {
+      std::stringstream buffer;
+      buffer
+        << status.error_code() << "\n"
+        << status.error_message() << "\n"
+        << status.error_details() << "\n";
+      std::cout <<  buffer.str();
+      return buffer.str();
+    }
+  }
 }
+  

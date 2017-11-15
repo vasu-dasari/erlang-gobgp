@@ -60,4 +60,17 @@ int main(int argc, char** argv)
     GoBgpClient::Self()->RouteAnnounce(GoBgpClient::RouteOp::Add, "l2vpn-evpn",
         "macadv aa:bb:cc:dd:ee:04 2.2.2.4 1 1 rd 64512:10 rt 64512:10 encap vxlan")
     << std::endl;
+
+  std::string output;
+  std::cout << "Serialize output for: Adding evpn route to 30.10.20.33/32: " << 
+    GoBgpClient::Self()->RouteAnnounce(GoBgpClient::RouteOp::Add, "l2vpn-evpn",
+        "macadv aa:bb:cc:dd:ee:04 2.2.2.4 1 1 rd 64512:10 rt 64512:10 encap vxlan", &output)
+    << std::endl;
+  for(size_t i = 1; i <= output.length(); i++) {
+    printf("%02x ", (unsigned char)output[i]);
+    if (i % 16 == 0) {
+      printf("\n");
+    }
+  }
+  printf("\n");
 }
