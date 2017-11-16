@@ -14,7 +14,7 @@
 
 -include("logger.hrl").
 -include("gobgp_pb.hrl").
-
+-include("bgp_api.hrl").
 %% API
 -export([start_link/0]).
 
@@ -43,16 +43,6 @@
 -record(neighbor_key_t, {
     ip_address      :: binary() | iolist() | undefined, %% <<"1.2.3.4">>
     as_number       :: non_neg_integer() | undefined
-}).
-
--record(route_entry_t, {
-    type            :: macadv,
-    ip_address      :: non_neg_integer() | binary() | iolist(),
-    mac_address     :: binary() | iolist(),
-    service_id      :: non_neg_integer(),
-    rd              :: binary() | iolist(),
-    rt              :: binary() | iolist(),
-    encap           :: mim | vxlan
 }).
 
 -record(neighbor_info_t, {
@@ -178,8 +168,6 @@ process_info_msg(retry_connection, #state{ip_address = Ip, port_number = PortNum
 process_info_msg({'EXIT',_,closed_by_peer}, #state{connection_timer_ref = TimerRef} = State) ->
     {noreply, State#state{connection = not_connected, connection_timer_ref = bgp_utils:restart_timer(TimerRef)}};
 
-process_info_msg({'EXIT',_,normal}, State) ->
-    {noreply, State};
 process_info_msg(Request, State) ->
     ?INFO("info: Request~n~p", [Request]),
     {noreply, State}.

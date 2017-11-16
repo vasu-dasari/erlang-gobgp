@@ -24,7 +24,7 @@ Once Erlang shell appears, one can call bgp_api:demo() which is a test driving f
 ## Erlang Screenhot
 ```
 $ make run
-(gobgp@258a817c534e)1> bgp_api:demo().
+(gobgp@258a817c534e)1> bgp_demo:demo().
 
 15:58:08.091 [info] server(set, localhost, 50051) =>
 ok

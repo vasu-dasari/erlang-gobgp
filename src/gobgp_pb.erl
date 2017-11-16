@@ -13,6 +13,7 @@
 -export([find_msg_def/1, fetch_msg_def/1]).
 -export([find_enum_def/1, fetch_enum_def/1]).
 -export([enum_symbol_by_value/2, enum_value_by_symbol/2]).
+-export([enum_symbol_by_value_Family/1, enum_value_by_symbol_Family/1]).
 -export(['enum_symbol_by_value_SoftResetNeighborRequest.SoftResetDirection'/1, 'enum_value_by_symbol_SoftResetNeighborRequest.SoftResetDirection'/1]).
 -export(['enum_symbol_by_value_AddBmpRequest.MonitoringPolicy'/1, 'enum_value_by_symbol_AddBmpRequest.MonitoringPolicy'/1]).
 -export([enum_symbol_by_value_Resource/1, enum_value_by_symbol_Resource/1]).
@@ -40,6 +41,7 @@
 -include("gpb.hrl").
 
 %% enumerated types
+-type 'Family'() :: '_' | 'IPv4' | 'IPv6' | 'IPv4_MC' | 'IPv6_MC' | 'IPv4_MPLS' | 'IPv6_MPLS' | 'IPv4_VPN' | 'IPv6_VPN' | 'IPv4_VPN_MC' | 'IPv6_VPN_MC' | 'VPLS' | 'EVPN' | 'RTC' | 'IPv4_ENCAP' | 'IPv6_ENCAP' | 'FLOW_SPEC_IPv4' | 'FLOW_SPEC_IPv6' | 'FLOW_SPEC_IPv4_VPN' | 'FLOW_SPEC_IPv6_VPN' | 'FLOW_SPEC_L2_VPN' | 'OPAQUE'.
 -type 'SoftResetNeighborRequest.SoftResetDirection'() :: 'IN' | 'OUT' | 'BOTH'.
 -type 'AddBmpRequest.MonitoringPolicy'() :: 'PRE' | 'POST' | 'BOTH' | 'LOCAL' | 'ALL'.
 -type 'Resource'() :: 'GLOBAL' | 'LOCAL' | 'ADJ_IN' | 'ADJ_OUT' | 'VRF'.
@@ -56,7 +58,7 @@
 -type 'CommunityActionType'() :: 'COMMUNITY_ADD' | 'COMMUNITY_REMOVE' | 'COMMUNITY_REPLACE'.
 -type 'MedActionType'() :: 'MED_MOD' | 'MED_REPLACE'.
 -type 'PolicyType'() :: 'IN' | 'IMPORT' | 'EXPORT'.
--export_type(['SoftResetNeighborRequest.SoftResetDirection'/0, 'AddBmpRequest.MonitoringPolicy'/0, 'Resource'/0, 'RPKIValidation.State'/0, 'RPKIValidation.Reason'/0, 'TableLookupOption'/0, 'PeerConf.RemovePrivateAs'/0, 'PeerState.AdminState'/0, 'DefinedType'/0, 'MatchType'/0, 'AsPathLengthType'/0, 'Conditions.RouteType'/0, 'RouteAction'/0, 'CommunityActionType'/0, 'MedActionType'/0, 'PolicyType'/0]).
+-export_type(['Family'/0, 'SoftResetNeighborRequest.SoftResetDirection'/0, 'AddBmpRequest.MonitoringPolicy'/0, 'Resource'/0, 'RPKIValidation.State'/0, 'RPKIValidation.Reason'/0, 'TableLookupOption'/0, 'PeerConf.RemovePrivateAs'/0, 'PeerState.AdminState'/0, 'DefinedType'/0, 'MatchType'/0, 'AsPathLengthType'/0, 'Conditions.RouteType'/0, 'RouteAction'/0, 'CommunityActionType'/0, 'MedActionType'/0, 'PolicyType'/0]).
 
 %% message types
 -type 'TableInfo'() :: #'TableInfo'{}.
@@ -38636,7 +38638,19 @@ cons(Elem, Acc, _TrUserData) -> [Elem | Acc].
 
 
 get_msg_defs() ->
-    [{{enum, 'SoftResetNeighborRequest.SoftResetDirection'},
+    [{{enum, 'Family'},
+      [{'_', 0}, {'IPv4', 65537}, {'IPv6', 131073},
+       {'IPv4_MC', 65538}, {'IPv6_MC', 131074},
+       {'IPv4_MPLS', 65540}, {'IPv6_MPLS', 131076},
+       {'IPv4_VPN', 65664}, {'IPv6_VPN', 131200},
+       {'IPv4_VPN_MC', 65665}, {'IPv6_VPN_MC', 131201},
+       {'VPLS', 1638465}, {'EVPN', 1638470}, {'RTC', 65668},
+       {'IPv4_ENCAP', 65543}, {'IPv6_ENCAP', 131079},
+       {'FLOW_SPEC_IPv4', 65669}, {'FLOW_SPEC_IPv6', 131205},
+       {'FLOW_SPEC_IPv4_VPN', 65670},
+       {'FLOW_SPEC_IPv6_VPN', 131206},
+       {'FLOW_SPEC_L2_VPN', 1638534}, {'OPAQUE', 1074594033}]},
+     {{enum, 'SoftResetNeighborRequest.SoftResetDirection'},
       [{'IN', 0}, {'OUT', 1}, {'BOTH', 2}]},
      {{enum, 'AddBmpRequest.MonitoringPolicy'},
       [{'PRE', 0}, {'POST', 1}, {'BOTH', 2}, {'LOCAL', 3},
@@ -39875,7 +39889,8 @@ get_msg_names() ->
 
 
 get_enum_names() ->
-    ['SoftResetNeighborRequest.SoftResetDirection',
+    ['Family',
+     'SoftResetNeighborRequest.SoftResetDirection',
      'AddBmpRequest.MonitoringPolicy', 'Resource',
      'RPKIValidation.State', 'RPKIValidation.Reason',
      'TableLookupOption', 'PeerConf.RemovePrivateAs',
@@ -41013,6 +41028,18 @@ find_msg_def('AddPathRequest') ->
 find_msg_def(_) -> error.
 
 
+find_enum_def('Family') ->
+    [{'_', 0}, {'IPv4', 65537}, {'IPv6', 131073},
+     {'IPv4_MC', 65538}, {'IPv6_MC', 131074},
+     {'IPv4_MPLS', 65540}, {'IPv6_MPLS', 131076},
+     {'IPv4_VPN', 65664}, {'IPv6_VPN', 131200},
+     {'IPv4_VPN_MC', 65665}, {'IPv6_VPN_MC', 131201},
+     {'VPLS', 1638465}, {'EVPN', 1638470}, {'RTC', 65668},
+     {'IPv4_ENCAP', 65543}, {'IPv6_ENCAP', 131079},
+     {'FLOW_SPEC_IPv4', 65669}, {'FLOW_SPEC_IPv6', 131205},
+     {'FLOW_SPEC_IPv4_VPN', 65670},
+     {'FLOW_SPEC_IPv6_VPN', 131206},
+     {'FLOW_SPEC_L2_VPN', 1638534}, {'OPAQUE', 1074594033}];
 find_enum_def('SoftResetNeighborRequest.SoftResetDirection') ->
     [{'IN', 0}, {'OUT', 1}, {'BOTH', 2}];
 find_enum_def('AddBmpRequest.MonitoringPolicy') ->
@@ -41057,6 +41084,8 @@ find_enum_def('PolicyType') ->
 find_enum_def(_) -> error.
 
 
+enum_symbol_by_value('Family', Value) ->
+    enum_symbol_by_value_Family(Value);
 enum_symbol_by_value('SoftResetNeighborRequest.SoftResetDirection',
 		     Value) ->
     'enum_symbol_by_value_SoftResetNeighborRequest.SoftResetDirection'(Value);
@@ -41094,6 +41123,8 @@ enum_symbol_by_value('PolicyType', Value) ->
     enum_symbol_by_value_PolicyType(Value).
 
 
+enum_value_by_symbol('Family', Sym) ->
+    enum_value_by_symbol_Family(Sym);
 enum_value_by_symbol('SoftResetNeighborRequest.SoftResetDirection',
 		     Sym) ->
     'enum_value_by_symbol_SoftResetNeighborRequest.SoftResetDirection'(Sym);
@@ -41129,6 +41160,59 @@ enum_value_by_symbol('MedActionType', Sym) ->
 enum_value_by_symbol('PolicyType', Sym) ->
     enum_value_by_symbol_PolicyType(Sym).
 
+
+enum_symbol_by_value_Family(0) -> '_';
+enum_symbol_by_value_Family(65537) -> 'IPv4';
+enum_symbol_by_value_Family(131073) -> 'IPv6';
+enum_symbol_by_value_Family(65538) -> 'IPv4_MC';
+enum_symbol_by_value_Family(131074) -> 'IPv6_MC';
+enum_symbol_by_value_Family(65540) -> 'IPv4_MPLS';
+enum_symbol_by_value_Family(131076) -> 'IPv6_MPLS';
+enum_symbol_by_value_Family(65664) -> 'IPv4_VPN';
+enum_symbol_by_value_Family(131200) -> 'IPv6_VPN';
+enum_symbol_by_value_Family(65665) -> 'IPv4_VPN_MC';
+enum_symbol_by_value_Family(131201) -> 'IPv6_VPN_MC';
+enum_symbol_by_value_Family(1638465) -> 'VPLS';
+enum_symbol_by_value_Family(1638470) -> 'EVPN';
+enum_symbol_by_value_Family(65668) -> 'RTC';
+enum_symbol_by_value_Family(65543) -> 'IPv4_ENCAP';
+enum_symbol_by_value_Family(131079) -> 'IPv6_ENCAP';
+enum_symbol_by_value_Family(65669) -> 'FLOW_SPEC_IPv4';
+enum_symbol_by_value_Family(131205) -> 'FLOW_SPEC_IPv6';
+enum_symbol_by_value_Family(65670) ->
+    'FLOW_SPEC_IPv4_VPN';
+enum_symbol_by_value_Family(131206) ->
+    'FLOW_SPEC_IPv6_VPN';
+enum_symbol_by_value_Family(1638534) ->
+    'FLOW_SPEC_L2_VPN';
+enum_symbol_by_value_Family(1074594033) -> 'OPAQUE'.
+
+
+enum_value_by_symbol_Family('_') -> 0;
+enum_value_by_symbol_Family('IPv4') -> 65537;
+enum_value_by_symbol_Family('IPv6') -> 131073;
+enum_value_by_symbol_Family('IPv4_MC') -> 65538;
+enum_value_by_symbol_Family('IPv6_MC') -> 131074;
+enum_value_by_symbol_Family('IPv4_MPLS') -> 65540;
+enum_value_by_symbol_Family('IPv6_MPLS') -> 131076;
+enum_value_by_symbol_Family('IPv4_VPN') -> 65664;
+enum_value_by_symbol_Family('IPv6_VPN') -> 131200;
+enum_value_by_symbol_Family('IPv4_VPN_MC') -> 65665;
+enum_value_by_symbol_Family('IPv6_VPN_MC') -> 131201;
+enum_value_by_symbol_Family('VPLS') -> 1638465;
+enum_value_by_symbol_Family('EVPN') -> 1638470;
+enum_value_by_symbol_Family('RTC') -> 65668;
+enum_value_by_symbol_Family('IPv4_ENCAP') -> 65543;
+enum_value_by_symbol_Family('IPv6_ENCAP') -> 131079;
+enum_value_by_symbol_Family('FLOW_SPEC_IPv4') -> 65669;
+enum_value_by_symbol_Family('FLOW_SPEC_IPv6') -> 131205;
+enum_value_by_symbol_Family('FLOW_SPEC_IPv4_VPN') ->
+    65670;
+enum_value_by_symbol_Family('FLOW_SPEC_IPv6_VPN') ->
+    131206;
+enum_value_by_symbol_Family('FLOW_SPEC_L2_VPN') ->
+    1638534;
+enum_value_by_symbol_Family('OPAQUE') -> 1074594033.
 
 'enum_symbol_by_value_SoftResetNeighborRequest.SoftResetDirection'(0) ->
     'IN';

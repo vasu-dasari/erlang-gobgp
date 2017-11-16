@@ -22,7 +22,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -export([server/3, router_id/3, neighbor/3, route/2, route_reflector/2]).
 -export([server/4, router_id/4, neighbor/4, route/3, route_reflector/3]).
--export([demo/0]).
+-export([]).
 -define(SERVER, ?MODULE).
 -define(EtsConfig, bgp_sessions_ets).
 
@@ -75,16 +75,6 @@ route(Op, RouteEntry) ->
     route({router,"localhost"}, Op, RouteEntry).
 route({router,_} = RouterKey, Op, RouteEntry) ->
     ?dispatch_cast(RouterKey, {route, Op, RouteEntry}).
-
-demo() ->
-    ?INFO("server(set, localhost, 50051) => ~n~p", [server(set, "localhost", 50051)]),
-    ?INFO("router_id(start, <<10.0.123.100>>, 65001) => ~n~p", [router_id(start, <<"10.0.123.110">>, 65001)]),
-    ?INFO("router_id(get, 0,0) => ~n~p", [router_id(get, 0,0)]),
-    ?INFO("neighbor(add, <<10.0.123.200>>, 65002) => ~n~p", [neighbor(add, <<"10.0.123.200">>, 65002)]),
-    ?INFO("neighbor(delete, <<10.0.123.200>>, 65002) => ~n~p", [neighbor(delete, <<"10.0.123.200">>, 65002)]),
-    ?INFO("neighbor(get,0,0) => ~n~p", [neighbor(get,0,0)]),
-    ?INFO("neighbor(add, <<10.0.123.200>>, 65002) => ~n~p", [neighbor(add, <<"10.0.123.200">>, 65002)]),
-    ?INFO("neighbor(get,0,0) => ~n~s", [bgp_utils:pretty_print(neighbor(get,0,0))]).
 
 pid(RouterKey) ->
     ?call({get_pid, RouterKey}).
