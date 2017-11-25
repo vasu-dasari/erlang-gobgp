@@ -20,8 +20,8 @@
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
--export([server/3, router_id/3, neighbor/3, route/2, route_reflector/2]).
--export([server/4, router_id/4, neighbor/4, route/3, route_reflector/3]).
+-export([server/3, router_id/3, neighbor/4, route/2, route_reflector/2]).
+-export([server/4, router_id/4, neighbor/5, route/3, route_reflector/3]).
 -export([]).
 -define(SERVER, ?MODULE).
 -define(EtsConfig, bgp_sessions_ets).
@@ -61,10 +61,10 @@ router_id(Op, RouterId, AsNumber) ->
 router_id({router,_} = RouterKey, Op, RouterId, AsNumber) ->
     ?dispatch_call(RouterKey, {router_id, Op, RouterId, AsNumber}).
 
-neighbor(Op, Ip, AsNumber) ->
-    neighbor({router,"localhost"}, Op, Ip, AsNumber).
-neighbor({router,_} = RouterKey, Op, Ip, AsNumber) ->
-    ?dispatch_call(RouterKey, {neighbor, Op, Ip, AsNumber}).
+neighbor(Op, Ip, AsNumber, Family) ->
+    neighbor({router,"localhost"}, Op, Ip, AsNumber, Family).
+neighbor({router,_} = RouterKey, Op, Ip, AsNumber, Family) ->
+    ?dispatch_call(RouterKey, {neighbor, Op, Ip, AsNumber, Family}).
 
 route_reflector(_Op, _IpAddress) ->
     ok.

@@ -46,7 +46,9 @@
 }).
 
 -record(neighbor_info_t, {
-    key
+    key,
+    family          :: gobgp_pb:'Family'(),
+    route_reflector :: binary() | iolist() | undefined
 }).
 
 %%%===================================================================
@@ -134,8 +136,8 @@ code_change(_OldVsn, State, _Extra) ->
 process_call({router_id,Op,Ip,AsNumber}, State) ->
     {Return,NewState} = do_router_id(Op, Ip, AsNumber, State),
     {reply, Return, NewState};
-process_call({neighbor,Op,Ip,AsNumber}, State) ->
-    {Return, NewState} = do_neighbor(Op, Ip, AsNumber, State),
+process_call({neighbor,Op,Ip,AsNumber, Family}, State) ->
+    {Return, NewState} = do_neighbor(Op, Ip, AsNumber, Family, State),
     {reply, Return, NewState};
 
 process_call(Request, State) ->
@@ -224,22 +226,23 @@ do_router_id(stop, _,_, #state{connection = Connection} = State) ->
     ets:delete(?EtsConfig, router_id),
     {ok,State}.
 
-do_neighbor(get, 0, 0, #state{connection = Connection} = State) ->
+do_neighbor(get, 0, 0, _, #state{connection = Connection} = State) ->
     {ok, #{result := Return}} =
         gobgp_client:'GetNeighbor'(Connection, #'GetNeighborRequest'{}, [{msgs_as_records, gobgp_pb}]),
     {Return, State};
-do_neighbor(add, Ip, AsNumber, #state{connection = not_connected} = State) ->
-    ets:insert(?EtsConfig, #neighbor_info_t{key = #neighbor_key_t{ip_address = Ip, as_number = AsNumber}}),
+do_neighbor(add, Ip, AsNumber, Family, #state{connection = not_connected} = State) ->
+    ets:insert(?EtsConfig, #neighbor_info_t{
+        key = #neighbor_key_t{ip_address = Ip, as_number = AsNumber}, family = Family
+    }),
     {not_connected, State};
-do_neighbor(delete, Ip, AsNumber, #state{connection = not_connected} = State) ->
+do_neighbor(delete, Ip, AsNumber, _, #state{connection = not_connected} = State) ->
     ets:delete(?EtsConfig, #neighbor_key_t{ip_address = Ip, as_number = AsNumber}),
     {not_connected, State};
-do_neighbor(add, Ip, AsNumber, #state{connection = Connection} = State) ->
+do_neighbor(add, Ip, AsNumber, Family, #state{connection = Connection} = State) ->
     [#router_id_t{router_id = RouterId}] = ets:lookup(?EtsConfig, router_id),
-    {ok,RouteFamily} = gobgp_nif:route_family("l2vpn-evpn"),
     Request = #'AddNeighborRequest'{
         peer = #'Peer'{
-            families = [RouteFamily],
+            families = [gobgp_pb:enum_value_by_symbol_Family(Family)],
             conf = #'PeerConf'{
                 neighbor_address = Ip,
                 peer_as = AsNumber
@@ -253,7 +256,7 @@ do_neighbor(add, Ip, AsNumber, #state{connection = Connection} = State) ->
     {ok,#{result := Result}} = gobgp_client:'AddNeighbor'(Connection, Request, [{msgs_as_records, gobgp_pb}]),
     ets:insert(?EtsConfig, #neighbor_info_t{key = #neighbor_key_t{ip_address = Ip, as_number = AsNumber}}),
     {Result, State};
-do_neighbor(delete, Ip, AsNumber, #state{connection = Connection} = State) ->
+do_neighbor(delete, Ip, AsNumber, _,  #state{connection = Connection} = State) ->
     Request = #'DeleteNeighborRequest'{
         peer = #'Peer'{
             conf = #'PeerConf'{
@@ -289,12 +292,31 @@ do_route(Op, RouteEntry, #state{connection = Connection}) ->
             Result
     end.
 
+%%<MACADV>    : <mac address> <ip address> <etag> <label> rd <rd> rt <rt>... [encap <encap type>]
+%%<MULTICAST> : <ip address> <etag> rd <rd> rt <rt>... [encap <encap type>]
+%%<PREFIX>    : <ip prefix> [gw <gateway>] etag <etag> rd <rd> rt <rt>... [encap <encap type>]`, cmdstr, modtype)
+
 route2nif(
         #route_entry_t{
-            type = macadv
-        }) ->
-    {"l2vpn-evpn", "macadv aa:bb:cc:dd:ee:04 2.2.2.4 1 1 rd 64512:10 rt 64512:10 encap vxlan"};
+            type = macadv,
+        mac_address = Mac
+        } = E) ->
+    NifStr =
+        io_lib:format("macadv ~s ~s ~p ~p rd ~s rt ~s encap ~p -a ~p", [
+            Mac,
+            E#route_entry_t.ip_address,
+            E#route_entry_t.service_id,
+            E#route_entry_t.service_id,
+            E#route_entry_t.rd,
+            E#route_entry_t.rt,
+            E#route_entry_t.encap,
+            E#route_entry_t.encap
+        ]),
+    ?INFO("NifStr ~s", [lists:flatten(NifStr)]),
+%%    {"l2vpn-evpn", "macadv aa:bb:cc:dd:ee:04 2.2.2.4 1 1 rd 64512:10 rt 64512:10 encap vxlan"};
+    {"l2vpn-evpn", lists:flatten(NifStr)};
 route2nif(_RouteEntry) ->
-    {"l2vpn-evpn", "macadv aa:bb:cc:dd:ee:04 2.2.2.4 1 1 rd 64512:10 rt 64512:10 encap vxlan"}.
+    {"l2vpn-evpn", "macadv aa:bb:cc:dd:ee:04 2.2.2.4 1 1 rd 65001:10 rt 65001:10 encap vxlan -a evpn"}.
+%%    {"l2vpn-evpn", "macadv aa:bb:cc:dd:ee:04 2.2.2.4 1 1 rd 64512:10 rt 64512:10 encap vxlan"}.
 
     
