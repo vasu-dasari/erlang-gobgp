@@ -7,28 +7,30 @@ ifeq ($(DOCKER),)
 $(error "Docker not available on this system")
 endif
 
-DOCKER_IMAGE := erlang_gobgp
-DOCKER_RUN := $(DOCKER) run -d -it --name $(DOCKER_IMAGE) \
+DOCKER_NAME := erlang_gobgp
+DOCKER_IMAGE = vdasari/erlango
+
+DOCKER_RUN := $(DOCKER) run -d -it --name $(DOCKER_NAME) \
 		-v $(HOME):$(HOME) -w $(shell pwd)
-DOCKER_EXEC := $(DOCKER) exec -it $(DOCKER_IMAGE) bash -c 
+DOCKER_EXEC := $(DOCKER) exec -it $(DOCKER_NAME) bash -c 
 DOCKER_EXEC_ARGS=cd $(shell pwd) &&
 DOCKER_REBAR := $(DOCKER_EXEC_ARGS) $(REBAR)
 
 # ERL_FLAGS=" -args_file config/vm.args -config config/sys.config" rebar3 shell
 SHELL_ARGS := ERL_FLAGS=\" -args_file config/vm.args -config config/sys.config\" $(REBAR) shell
 
-all: run
+all: compile
 
 container:
-ifneq ($(shell $(DOCKER) ps -f name=$(DOCKER_IMAGE) | grep Up > /dev/null; echo $$?),0)
-	 @$(shell $(DOCKER) stop $(DOCKER_IMAGE) &> /dev/null)
-	 @$(shell $(DOCKER) rm $(DOCKER_IMAGE) &> /dev/null)
-	 @$(DOCKER_RUN) vdasari/erlango
+ifneq ($(shell $(DOCKER) ps -f name=$(DOCKER_NAME) | grep Up > /dev/null; echo $$?),0)
+	 @$(shell $(DOCKER) stop $(DOCKER_NAME) &> /dev/null)
+	 @$(shell $(DOCKER) rm $(DOCKER_NAME) &> /dev/null)
+	 @$(DOCKER_RUN) $(DOCKER_IMAGE)
 endif
 
 container-clean:
-	@$(DOCKER) stop $(DOCKER_IMAGE)
-	@$(DOCKER) rm $(DOCKER_IMAGE)
+	@$(DOCKER) stop $(DOCKER_NAME)
+	@$(DOCKER) rm $(DOCKER_NAME)
 
 compile: container
 	@$(DOCKER_EXEC) "$(DOCKER_REBAR) compile"
@@ -47,10 +49,8 @@ deep-clean: clean
 shell: container
 	@$(DOCKER_EXEC) "$(DOCKER_EXEC_ARGS) bash"
 
-run: compile
-ifneq ($(shell ps -aef | grep gobgpd | grep -v grep &> /dev/null; echo $$?),0)
-	/go/bin/gobgpd --syslog &
-endif
-	@$(DOCKER_EXEC) "$(DOCKER_EXEC_ARGS) $(SHELL_ARGS)"
+%:
+	@:
 
+include examples/Makefile
 .SILENT:

@@ -1,0 +1,88 @@
+version: '2.1'
+
+services:
+  erlang_gobgp:
+    image: vdasari/erlango:latest
+    container_name: erlang_gobgp
+    hostname: erlang_gobgp
+    volumes:
+        - ${HOME}:${HOME}
+    networks:
+      default_net:
+        ipv4_address: 10.0.123.10
+      network_1:
+        ipv4_address: 10.0.124.30
+
+  gobgp_1:
+    image: vdasari/erlango:latest
+    container_name: gobgp_1
+    hostname: gobgp_1
+    volumes:
+        - ${HOME}:${HOME}
+    networks:
+      default_net:
+        ipv4_address: 10.0.123.100
+
+  gobgp_2:
+    image: vdasari/erlango:latest
+    container_name: gobgp_2
+    hostname: gobgp_2
+    volumes:
+        - ${HOME}:${HOME}
+    networks:
+      default_net:
+        ipv4_address: 10.0.123.200
+
+  ryu1:
+    image: vdasari/ovs-mn-ryu:latest
+    container_name: ryu1
+    hostname: ryu1
+    volumes:
+      - ${HOME}:${HOME}
+    ports:
+      - "10001:8080"
+    entrypoint: |
+      bash -c 'bash -s <<EOF
+      service openvswitch-switch start
+      ryu-manager ryu.app.ofctl_rest ryu.app.rest_vtep ryu.app.simple_switch_13
+      EOF'
+    privileged: true
+    networks:
+      default_net:
+        ipv4_address: 10.0.123.20
+      network_1:
+        ipv4_address: 10.0.124.20
+
+  ryu2:
+    image: vdasari/ovs-mn-ryu:latest
+    container_name: ryu2
+    hostname: ryu2
+    volumes:
+      - ${HOME}:${HOME}
+    ports:
+      - "10002:8080"
+    entrypoint: |
+      bash -c 'bash -s <<EOF
+      service openvswitch-switch start
+      ryu-manager ryu.app.ofctl_rest ryu.app.rest_vtep ryu.app.simple_switch_13
+      EOF'
+    privileged: true
+    networks:
+      default_net:
+        ipv4_address: 10.0.123.30
+
+networks:
+  default_net:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+      - subnet: 10.0.123.0/24
+        gateway: 10.0.123.1
+  network_1:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+      - subnet: 10.0.124.0/24
+        gateway: 10.0.124.1
