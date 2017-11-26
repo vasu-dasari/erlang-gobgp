@@ -9,8 +9,8 @@
 -module(bgp_demo).
 -author("vdasari").
 
--include("logger.hrl").
--include("bgp_api.hrl").
+-include_lib("logger.hrl").
+-include_lib("bgp_api.hrl").
 
 %% API
 -export([demo/0, demo1/0, setup/2, ryu/0]).
@@ -22,20 +22,6 @@
 -define(RouterId_Control, "1.1.1.10").
 -define(RouterId_GoBGP_1, "1.1.1.100").
 -define(RouterId_GoBGP_2, "1.1.1.200").
-
--record(l2VpnAccessVtepInfo, {
-    accessVteps = [] :: list(),
-    switches = [] :: list()
-}).
-
--record(vtep, {
-    ipAddress = undefined :: string(),
-    macAddress = undefined :: string()
-}).
-
--record(l2VpnUplinkVtepInfo, {
-    vtep = #vtep{} :: #vtep{}
-}).
 
 demo() ->
     %% Setup control BGP Session

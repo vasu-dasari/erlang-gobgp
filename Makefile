@@ -52,5 +52,5 @@ shell: container
 %:
 	@:
 
-include examples/Makefile
+include apps/examples/Makefile
 .SILENT:

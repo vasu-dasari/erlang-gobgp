@@ -219,6 +219,9 @@ do_router_id(start, NewRouterId, NewAsNumber, #state{connection = Connection} = 
         }
     },
     {ok,_} = gobgp_client:'StartServer'(Connection, Request, [{msgs_as_records, gobgp_pb}]),
+%%    gobgp_client:
+%%    {ok,_} = gobgp_client:'Monit'(Connection, Request, [{msgs_as_records, gobgp_pb}]),
+
     ets:insert(?EtsConfig, #router_id_t{router_id = NewRouterId, as_number = NewAsNumber}),
     {ok, State};
 do_router_id(stop, _,_, #state{connection = Connection} = State) ->
