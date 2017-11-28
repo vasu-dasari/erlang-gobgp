@@ -20,8 +20,8 @@
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
--export([server/3, router_id/3, neighbor/4, route/2, route_reflector/2]).
--export([server/4, router_id/4, neighbor/5, route/3, route_reflector/3]).
+-export([server/3, router_id/3, neighbor/4, route/2, route_reflector/2, status/0, api/2]).
+-export([server/4, router_id/4, neighbor/5, route/3, route_reflector/3, status/1, api/3]).
 -export([]).
 -define(SERVER, ?MODULE).
 -define(EtsConfig, bgp_sessions_ets).
@@ -75,6 +75,16 @@ route(Op, RouteEntry) ->
     route({router,"localhost"}, Op, RouteEntry).
 route({router,_} = RouterKey, Op, RouteEntry) ->
     ?dispatch_cast(RouterKey, {route, Op, RouteEntry}).
+
+api(MethodName, Request) ->
+    api({router,"localhost"}, MethodName, Request).
+api({router,_} = RouterKey, MethodName, Request) ->
+    ?dispatch_call(RouterKey, {api, MethodName, Request}).
+
+status() ->
+    status({router,"localhost"}).
+status({router,_} = RouterKey) ->
+    ?dispatch_call(RouterKey, status).
 
 pid(RouterKey) ->
     ?call({get_pid, RouterKey}).

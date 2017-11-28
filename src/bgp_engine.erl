@@ -37,8 +37,9 @@
 -record(router_id_t, {
     key = router_id,
     router_id = not_set,
-    as_number = not_set
-}).
+    as_number = not_set,
+    peer_state_stream,
+    rib_stream}).
 
 -record(neighbor_key_t, {
     ip_address      :: binary() | iolist() | undefined, %% <<"1.2.3.4">>
@@ -139,6 +140,11 @@ process_call({router_id,Op,Ip,AsNumber}, State) ->
 process_call({neighbor,Op,Ip,AsNumber, Family}, State) ->
     {Return, NewState} = do_neighbor(Op, Ip, AsNumber, Family, State),
     {reply, Return, NewState};
+process_call({api, Method, Request}, State) ->
+    {reply, do_api(Method, Request, State), State};
+process_call(status, State) ->
+    do_status(State),
+    {reply, ok, State};
 
 process_call(Request, State) ->
     ?INFO("call: Unhandled Request ~p", [Request]),
@@ -159,6 +165,7 @@ process_info_msg({init},
             ip_address = Ip,
             port_number = Port
         } = State) ->
+    pg2:create(gobgp_advt),
     process_flag(trap_exit, true),
     {_,NewState} = do_server(set, Ip, Port, State),
     {noreply, NewState};
@@ -169,6 +176,9 @@ process_info_msg(retry_connection, #state{ip_address = Ip, port_number = PortNum
 
 process_info_msg({'EXIT',_,closed_by_peer}, #state{connection_timer_ref = TimerRef} = State) ->
     {noreply, State#state{connection = not_connected, connection_timer_ref = bgp_utils:restart_timer(TimerRef)}};
+process_info_msg({_,{data,Message}}, State) ->
+    do_notify(Message),
+    {noreply, State};
 
 process_info_msg(Request, State) ->
     ?INFO("info: Request~n~p", [Request]),
@@ -219,15 +229,41 @@ do_router_id(start, NewRouterId, NewAsNumber, #state{connection = Connection} = 
         }
     },
     {ok,_} = gobgp_client:'StartServer'(Connection, Request, [{msgs_as_records, gobgp_pb}]),
-%%    gobgp_client:
-%%    {ok,_} = gobgp_client:'Monit'(Connection, Request, [{msgs_as_records, gobgp_pb}]),
 
-    ets:insert(?EtsConfig, #router_id_t{router_id = NewRouterId, as_number = NewAsNumber}),
+    {PeerStream, RibStream} = do_monitor(Connection),
+
+    ets:insert(?EtsConfig, #router_id_t{
+        router_id = NewRouterId, as_number = NewAsNumber,
+        peer_state_stream = PeerStream,
+        rib_stream = RibStream
+    }),
     {ok, State};
 do_router_id(stop, _,_, #state{connection = Connection} = State) ->
     gobgp_client:'StopServer'(Connection, #'StopServerRequest'{}, [{msgs_as_records,gobgp_pb}]),
     ets:delete(?EtsConfig, router_id),
     {ok,State}.
+
+do_monitor(Connection) ->
+    {ok, PeerStream} = grpc_client:new_stream(Connection, 'GobgpApi', 'MonitorPeerState',
+        gobgp, [
+            {msgs_as_records, gobgp_pb},
+            {async_notification, self()}
+        ]),
+    grpc_client:send(PeerStream, #'Arguments'{name = ""}),
+
+    {ok, RibStream} = grpc_client:new_stream(Connection, 'GobgpApi', 'MonitorRib',
+        gobgp, [
+            {msgs_as_records, gobgp_pb},
+            {async_notification, self()}
+        ]),
+    grpc_client:send(RibStream,
+        #'MonitorRibRequest'{
+            table = #'Table'{
+                type = 'GLOBAL',
+                family = gobgp_pb:enum_value_by_symbol_Family('EVPN')
+            }
+        }),
+    {PeerStream, RibStream}.
 
 do_neighbor(get, 0, 0, _, #state{connection = Connection} = State) ->
     {ok, #{result := Return}} =
@@ -275,6 +311,11 @@ do_neighbor(delete, Ip, AsNumber, _,  #state{connection = Connection} = State) -
     ets:delete(?EtsConfig, #neighbor_key_t{ip_address = Ip, as_number = AsNumber}),
     {Result, State}.
 
+do_api(MethodName, Request, State) ->
+    {ok, #{result := Result}} = gobgp_client:MethodName(
+        State#state.connection, Request, [{msgs_as_records, gobgp_pb}]),
+    Result.
+
 make_ets_name(Name) when is_atom(Name) ->
     erlang:list_to_atom("bgp_" ++ erlang:atom_to_list(Name));
 make_ets_name(Name) when is_list(Name) ->
@@ -282,7 +323,6 @@ make_ets_name(Name) when is_list(Name) ->
 
 do_route(Op, RouteEntry, #state{connection = Connection}) ->
     {Family, NifStr} = route2nif(RouteEntry),
-    ?INFO("nif: Family ~p, Command ~p", [Family, NifStr]),
     {ok,EncodedBytes} = gobgp_nif:route(Op, Family, NifStr),
     case Op of
         add ->
@@ -295,14 +335,10 @@ do_route(Op, RouteEntry, #state{connection = Connection}) ->
             Result
     end.
 
-%%<MACADV>    : <mac address> <ip address> <etag> <label> rd <rd> rt <rt>... [encap <encap type>]
-%%<MULTICAST> : <ip address> <etag> rd <rd> rt <rt>... [encap <encap type>]
-%%<PREFIX>    : <ip prefix> [gw <gateway>] etag <etag> rd <rd> rt <rt>... [encap <encap type>]`, cmdstr, modtype)
-
 route2nif(
         #route_entry_t{
             type = macadv,
-        mac_address = Mac
+            mac_address = Mac
         } = E) ->
     NifStr =
         io_lib:format("macadv ~s ~s ~p ~p rd ~s rt ~s encap ~p -a ~p", [
@@ -315,11 +351,100 @@ route2nif(
             E#route_entry_t.encap,
             E#route_entry_t.encap
         ]),
-    ?INFO("NifStr ~s", [lists:flatten(NifStr)]),
-%%    {"l2vpn-evpn", "macadv aa:bb:cc:dd:ee:04 2.2.2.4 1 1 rd 64512:10 rt 64512:10 encap vxlan"};
+    ?DEBUG("NifStr ~s", [lists:flatten(NifStr)]),
     {"l2vpn-evpn", lists:flatten(NifStr)};
 route2nif(_RouteEntry) ->
     {"l2vpn-evpn", "macadv aa:bb:cc:dd:ee:04 2.2.2.4 1 1 rd 65001:10 rt 65001:10 encap vxlan -a evpn"}.
-%%    {"l2vpn-evpn", "macadv aa:bb:cc:dd:ee:04 2.2.2.4 1 1 rd 64512:10 rt 64512:10 encap vxlan"}.
 
-    
+do_status(State) ->
+    [#router_id_t{
+        peer_state_stream = PeerStream,
+        rib_stream = RibStream
+    }] = ets:lookup(?EtsConfig, router_id),
+    ?INFO("Peer State ~p", [grpc_client:get(PeerStream)]),
+    ?INFO("Rib State ~p", [grpc_client:get(RibStream)]),
+    ?INFO("Peer State ~p", [grpc_client:rcv(PeerStream, 1000)]),
+    ?INFO("Rib State ~p", [grpc_client:rcv(RibStream, 1000)]),
+    _X = State,
+    ok.
+
+do_notify(
+        #'Peer'{
+            conf = #'PeerConf'{
+                neighbor_address = Ip
+            },
+            info = #'PeerState'{
+                bgp_state = BgpState,
+                admin_state = AdminState
+            }
+        }) ->
+    NeighborAdvt = #neighbor_advt_t{
+        neighbor_ip = Ip,
+        admin_state = case AdminState of 'UP' -> up; 'DOWN' -> down end,
+        oper_state = get_bgp_state(BgpState)
+    },
+    do_announce(NeighborAdvt),
+    ?DEBUG("Neighbor announcement ~p", [NeighborAdvt]);
+do_notify(
+        #'Destination'{
+            prefix = Prefix,
+            paths = Paths
+
+        }) ->
+    PathsAdvt = lists:foldl(fun
+        (#'Path'{
+            is_withdraw = IsWithDraw,
+            source_asn = SourceAsn,
+            neighbor_ip = NeighborIp
+        }, Acc) ->
+            [
+                #path_advt_t{
+                    oper = case IsWithDraw of true -> delete; _ -> add end,
+                    asn = SourceAsn,
+                    neighbor_ip = NeighborIp
+                } | Acc]
+    end, [], Paths),
+
+    RouteAdvt = lists:foldl(fun
+        (Tuple, Acc) ->
+            extract_prefix_tuple(Tuple, Acc)
+    end, #route_advt_t{paths = PathsAdvt}, string:tokens(binary_to_list(Prefix), "[]")),
+
+    do_announce(RouteAdvt),
+
+    ?DEBUG("Route Announcement ~p", [RouteAdvt]),
+    ok;
+do_notify(Msg) ->
+    ?INFO("Unknown notification ~p", [Msg]).
+
+do_announce(Advt) ->
+    case pg2:get_local_members(gobgp_advt) of
+        {error, _} ->
+            ok;
+        Pids ->
+            [gen_server:cast(Pid, {?MODULE, gobgp_advt, Advt}) || Pid <- Pids]
+    end.
+
+get_bgp_state(BgpState) ->
+    case BgpState of
+        <<"BGP_FSM_IDLE">> -> idle;
+        <<"BGP_FSM_CONNECT">> -> connect;
+        <<"BGP_FSM_ACTIVE">> -> active;
+        <<"BGP_FSM_OPENSENT">> -> open_sent;
+        <<"BGP_FSM_OPENCONFIRM">> -> open_confirm;
+        <<"BGP_FSM_ESTABLISHED">> -> estbl
+    end.
+
+extract_prefix_tuple("type:" ++ ValueStr, RouteAdvt) ->
+    RouteAdvt#route_advt_t{type = list_to_atom(ValueStr)};
+extract_prefix_tuple("rd:" ++ ValueStr, RouteAdvt) ->
+    RouteAdvt#route_advt_t{rd = list_to_binary(ValueStr)};
+extract_prefix_tuple("etag:" ++ ValueStr, RouteAdvt) ->
+    RouteAdvt#route_advt_t{etag = list_to_integer(ValueStr)};
+extract_prefix_tuple("mac:" ++ ValueStr, RouteAdvt) ->
+    RouteAdvt#route_advt_t{mac =  list_to_binary(ValueStr)};
+extract_prefix_tuple("ip:" ++ ValueStr, RouteAdvt) ->
+    RouteAdvt#route_advt_t{ip = list_to_binary(ValueStr)};
+extract_prefix_tuple(Tuple, RouteAdvt) ->
+    ?INFO("Unhandled prefix tuple: ~p", [Tuple]),
+    RouteAdvt.
