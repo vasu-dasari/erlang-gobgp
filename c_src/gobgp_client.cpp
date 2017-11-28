@@ -142,8 +142,10 @@ std::string GoBgpClient::RouteAnnounce(RouteOp Op,
     std::string *serialize_buf)
 {
   std::string route_descr(route_descr_const);
+  uint32_t family = get_route_family(route_family.c_str());
+
 	path* path_c_struct = serialize_path(
-			get_route_family(route_family.c_str()), (char*)route_descr.c_str());
+			family, (char*)route_descr.c_str());
 
   if (path_c_struct == NULL) {
     std::cerr << "Could not generate path\n";
@@ -165,18 +167,22 @@ std::string GoBgpClient::RouteAnnounce(RouteOp Op,
   }
 
   current_path->set_nlri(path_c_struct->nlri.value, path_c_struct->nlri.len);
-  current_path->set_family(get_route_family("ipv4-unicast"));
+  current_path->set_family(family);
 
   if (serialize_buf) {
     if (Op == RouteOp::Add) {
       gobgpapi::AddPathRequest request;
       gobgpapi::AddPathResponse response;
+
+      request.set_resource(gobgpapi::Resource::GLOBAL);
       request.set_allocated_path(current_path);
 
       request.SerializeToString(serialize_buf);
     } else {
       gobgpapi::DeletePathRequest request;
       gobgpapi::DeletePathResponse response;
+
+      request.set_resource(gobgpapi::Resource::GLOBAL);
       request.set_allocated_path(current_path);
 
       request.SerializeToString(serialize_buf);

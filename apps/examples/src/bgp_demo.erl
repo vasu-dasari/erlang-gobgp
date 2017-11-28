@@ -11,9 +11,10 @@
 
 -include_lib("logger.hrl").
 -include_lib("bgp_api.hrl").
+-include("gobgp_pb.hrl").
 
 %% API
--export([demo/0, demo1/0, setup/2, ryu/0]).
+-export([demo/0, demo1/0, setup/2, ryu/0, refresh/0, route/1, handle_advts/0, vrf/1]).
 
 -define(Control, "10.0.123.10").
 -define(GoBGP_1, "10.0.123.100").
@@ -39,18 +40,7 @@ demo() ->
             encap = vxlan,
             family = 'EVPN'
         }).
-%%io_lib:format("macadv ~s ~s ~p ~p rd ~p rt ~p encap ~p", [
-%%Mac,
-%%E#route_entry_t.service_id,
-%%E#route_entry_t.service_id,
-%%E#route_entry_t.rd,
-%%E#route_entry_t.rt,
-%%E#route_entry_t.encap,
-%%E#route_entry_t.encap
-%%]),
-%%?INFO("NifStr ~s", [lists:flatten(NifStr)]),
-%%{"l2vpn-evpn", "macadv aa:bb:cc:dd:ee:04 2.2.2.4 1 1 rd 64512:10 rt 64512:10 encap vxlan"};
-%%    
+
 demo1() ->
 
     ?INFO("server(set, localhost, 50051) => ~n~p", [bgp_api:server(set, "localhost", 50051)]),
@@ -95,7 +85,87 @@ ryu() ->
 
     RouterInstance = {router, Container},
 
+    handle_advts(),
+
     bgp_api:server(RouterInstance, set, Container, 50051),
     bgp_api:router_id(RouterInstance, start, list_to_binary(RouterId), 65000),
 
-    bgp_api:neighbor(RouterInstance, add, list_to_binary(Neighbor), 65000, 'EVPN').
+    bgp_api:neighbor(RouterInstance, add, list_to_binary(Neighbor), 65000, 'EVPN'),
+
+    bgp_api:api(RouterInstance, 'AddVrf',
+        #'AddVrfRequest'{
+            vrf = #'Vrf'{
+                name = <<"vrf1000">>,
+                id = 1000,
+                rd = bgp_utils:rdrt2binary("65000:1000"),
+                import_rt = [bgp_utils:rdrt2binary("65000:1000")],
+                export_rt = [bgp_utils:rdrt2binary("65000:1000")]
+            }
+        }),
+    bgp_api:route(RouterInstance, add,
+        #route_entry_t{
+            type = macadv,
+            mac_address = "aa:bb:cc:dd:ee:04",
+            ip_address = "10.0.1.3",
+            service_id = 1000,
+            rd = "65000:1000",
+            rt = "65000:1000",
+            encap = vxlan,
+            family = 'EVPN'
+        }).
+
+
+refresh() ->
+    bgp_api:neighbor({router, "10.0.124.30"}, delete, list_to_binary("10.0.124.20"), 65000, 'EVPN'),
+    bgp_api:neighbor({router, "10.0.124.30"}, add, list_to_binary("10.0.124.20"), 65000, 'EVPN').
+
+route(Op) ->
+    Container = "10.0.124.30",
+    bgp_api:route({router,Container}, Op,
+        #route_entry_t{
+            type = macadv,
+            mac_address = "aa:bb:cc:dd:ee:04",
+            ip_address = "10.0.1.3",
+            service_id = 1000,
+            rd = "65000:1000",
+            rt = "65000:1000",
+            encap = vxlan,
+            family = 'EVPN'
+        }).
+
+vrf(Op) ->
+    Vrf = #'Vrf'{
+        name = <<"vrf1000">>,
+        id = 1000,
+        rd = bgp_utils:rdrt2binary("65000:1000"),
+        import_rt = [bgp_utils:rdrt2binary("65000:1000")],
+        export_rt = [bgp_utils:rdrt2binary("65000:1000")]
+    },
+    case Op of
+        add ->
+            bgp_api:api({router,"10.0.124.30"}, 'AddVrf',
+                #'AddVrfRequest'{
+                    vrf = Vrf
+                });
+        delete ->
+            bgp_api:api({router,"10.0.124.30"}, 'DeleteVrf',
+                #'DeleteVrfRequest'{
+                    vrf = Vrf
+                })
+    end.
+
+handle_advts() ->
+    spawn(fun() ->
+        pg2:create(gobgp_advt),
+        pg2:join(gobgp_advt, self()),
+        rx_advt_loop()
+    end).
+
+rx_advt_loop() ->
+    receive
+        {'$gen_cast',{bgp_engine, gobgp_advt, Msg}} ->
+            ?INFO("Advt: ~s", [bgp_utils:record_to_proplist(to_str, Msg)]),
+            rx_advt_loop();
+        Msg ->
+            ?INFO("Unknown Advt received, so quitting: ~p", [Msg])
+    end.
