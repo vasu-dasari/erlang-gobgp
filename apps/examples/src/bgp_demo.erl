@@ -14,106 +14,88 @@
 -include("gobgp_pb.hrl").
 
 %% API
--export([demo/0, demo1/0, setup/2, ryu/0, refresh/0, route/1, handle_advts/0, vrf/1]).
+-export([demo/0, control/0, refresh/0, route/1, handle_advts/0, vrf/1, gobgp1/0]).
 
--define(Control, "10.0.123.10").
--define(GoBGP_1, "10.0.123.100").
--define(GoBGP_2, "10.0.123.200").
+-define(Control, "10.0.100.1").
+-define(GoBGP_1, "10.0.100.2").
+-define(GoBGP_2, "10.0.100.3").
+-define(Ryu1, "10.0.201.2").
+-define(Ryu2, "10.0.202.2").
+
+-define(Control_AS, 65000).
+-define(GoBGP_1_AS, 65000).
+-define(GoBGP_2_AS, 65000).
+-define(Ryu1_AS, 65000).
+-define(Ryu2_AS, 65000).
 
 -define(RouterId_Control, "1.1.1.10").
 -define(RouterId_GoBGP_1, "1.1.1.100").
 -define(RouterId_GoBGP_2, "1.1.1.200").
 
 demo() ->
-    %% Setup control BGP Session
-    setup(?Control, ?RouterId_Control),
-    setup(?GoBGP_1, ?RouterId_GoBGP_1),
-    setup(?GoBGP_2, ?RouterId_GoBGP_2),
-    bgp_api:route({router,?Control}, add,
-        #route_entry_t{
-            type = macadv,
-            mac_address = "aa:bb:cc:dd:ee:04",
-            ip_address = "3.3.3.1",
-            service_id = 1000,
-            rd = "64512:10",
-            rt = "64512:10",
-            encap = vxlan,
-            family = 'EVPN'
-        }).
-
-demo1() ->
-
-    ?INFO("server(set, localhost, 50051) => ~n~p", [bgp_api:server(set, "localhost", 50051)]),
-    ?INFO("router_id(start, <<10.0.123.100>>, 65001) => ~n~p", [bgp_api:router_id(start, <<"10.0.123.100">>, 65001)]),
-    ?INFO("neighbor(add, <<10.0.123.100>>, 65001) => ~n~p", [bgp_api:neighbor(add, <<"10.0.123.200">>, 65002)]),
-    ?INFO("router_id(get, 0,0) => ~n~p", [bgp_api:router_id(get, 0,0)]),
-
-    ?INFO("neighbor(add, <<10.0.123.200>>, 65002) => ~n~p", [bgp_api:neighbor(add, <<"10.0.123.200">>, 65002)]),
-    ?INFO("neighbor(delete, <<10.0.123.200>>, 65002) => ~n~p", [bgp_api:neighbor(delete, <<"10.0.123.200">>, 65002)]),
-    ?INFO("neighbor(get,0,0) => ~n~p", [bgp_api:neighbor(get,0,0)]),
-    ?INFO("neighbor(add, <<10.0.123.200>>, 65002) => ~n~p", [bgp_api:neighbor(add, <<"10.0.123.200">>, 65002)]),
-    ?INFO("neighbor(get,0,0) => ~n~s", [bgp_utils:pretty_print(bgp_api:neighbor(get,0,0))]),
-    ?INFO("neighbor(get,0,0) => ~n~s", [bgp_api:route(add,#route_entry_t{})]).
-
-setup(Container, RouterId) ->
-
-    RouterInstance = {router, Container},
-    
-    bgp_api:server(RouterInstance, set, Container, 50051),
-    bgp_api:router_id(RouterInstance, start, list_to_binary(RouterId), 65001),
-
-    case Container == ?Control of
-        true -> ok;
-        _ -> bgp_api:neighbor(RouterInstance, add, <<?Control>>, 65001, 'EVPN')
-    end,
-
-    case Container == ?GoBGP_1 of
-        true -> ok;
-        _ -> bgp_api:neighbor(RouterInstance, add, <<?GoBGP_1>>, 65001, 'EVPN')
-    end,
-
-    case Container == ?GoBGP_2 of
-        true -> ok;
-        _ -> bgp_api:neighbor(RouterInstance, add, <<?GoBGP_2>>, 65001, 'EVPN')
-    end.
-
-ryu() ->
-
-    Container = "10.0.124.30",
-    RouterId = "10.0.124.30",
-    Neighbor = "10.0.124.20",
-
-    RouterInstance = {router, Container},
-
     handle_advts(),
 
-    bgp_api:server(RouterInstance, set, Container, 50051),
-    bgp_api:router_id(RouterInstance, start, list_to_binary(RouterId), 65000),
+    control(),
+    gobgp1(),
+    gobgp2(),
+    ok.
 
-    bgp_api:neighbor(RouterInstance, add, list_to_binary(Neighbor), 65000, 'EVPN'),
+control() ->
+    RouterInstance = {router, control},
 
-    bgp_api:api(RouterInstance, 'AddVrf',
-        #'AddVrfRequest'{
-            vrf = #'Vrf'{
-                name = <<"vrf1000">>,
-                id = 1000,
-                rd = bgp_utils:rdrt2binary("65000:1000"),
-                import_rt = [bgp_utils:rdrt2binary("65000:1000")],
-                export_rt = [bgp_utils:rdrt2binary("65000:1000")]
+    bgp_api:server(RouterInstance, set, ?Control, 50051),
+    bgp_api:router_id(RouterInstance, start, list_to_binary(?RouterId_Control), ?Control_AS),
+
+    bgp_api:api(RouterInstance, 'AddNeighbor',
+        #'AddNeighborRequest'{
+            peer = #'Peer'{
+                families = [gobgp_pb:enum_value_by_symbol_Family('EVPN')],
+                conf = #'PeerConf'{
+                    neighbor_address = list_to_binary(?Ryu1),
+                    peer_as = ?Ryu1_AS
+                },
+                route_reflector = #'RouteReflector'{
+                    route_reflector_client = 1,
+                    route_reflector_cluster_id = list_to_binary(?RouterId_Control)
+                }
             }
         }),
-    bgp_api:route(RouterInstance, add,
-        #route_entry_t{
-            type = macadv,
-            mac_address = "aa:bb:cc:dd:ee:04",
-            ip_address = "10.0.1.3",
-            service_id = 1000,
-            rd = "65000:1000",
-            rt = "65000:1000",
-            encap = vxlan,
-            family = 'EVPN'
-        }).
+    bgp_api:neighbor(RouterInstance, add, list_to_binary(?GoBGP_1), ?GoBGP_1_AS, 'EVPN'),
+    bgp_api:neighbor(RouterInstance, add, list_to_binary(?GoBGP_2), ?GoBGP_2_AS, 'EVPN'),
+    ok.
 
+gobgp1() ->
+    RouterInstance = {router, gobgp1},
+
+    bgp_api:server(RouterInstance, set, ?GoBGP_1, 50051),
+    bgp_api:router_id(RouterInstance, start, list_to_binary(?RouterId_GoBGP_1), ?GoBGP_1_AS),
+
+    bgp_api:api(RouterInstance, 'AddNeighbor',
+        #'AddNeighborRequest'{
+            peer = #'Peer'{
+                families = [gobgp_pb:enum_value_by_symbol_Family('EVPN')],
+                conf = #'PeerConf'{
+                    neighbor_address = list_to_binary(?Ryu2),
+                    peer_as = ?Ryu2_AS
+                },
+                route_reflector = #'RouteReflector'{
+                    route_reflector_client = 1,
+                    route_reflector_cluster_id = list_to_binary(?RouterId_GoBGP_1)
+                }
+            }
+        }),
+    bgp_api:neighbor(RouterInstance, add, list_to_binary(?Control), ?Control_AS, 'EVPN'),
+    ok.
+
+gobgp2() ->
+    RouterInstance = {router, gobgp2},
+
+    bgp_api:server(RouterInstance, set, ?GoBGP_2, 50051),
+    bgp_api:router_id(RouterInstance, start, list_to_binary(?RouterId_GoBGP_2), ?GoBGP_2_AS),
+
+    bgp_api:neighbor(RouterInstance, add, list_to_binary(?Control), ?Control_AS, 'EVPN'),
+
+    ok.
 
 refresh() ->
     bgp_api:neighbor({router, "10.0.124.30"}, delete, list_to_binary("10.0.124.20"), 65000, 'EVPN'),
@@ -163,8 +145,8 @@ handle_advts() ->
 
 rx_advt_loop() ->
     receive
-        {'$gen_cast',{bgp_engine, gobgp_advt, Msg}} ->
-            ?INFO("Advt: ~s", [bgp_utils:record_to_proplist(to_str, Msg)]),
+        {'$gen_cast',{gobgp_advt, Source, Msg}} ->
+            ?INFO("Advt: ~p: ~s", [Source, bgp_utils:record_to_proplist(to_str, Msg)]),
             rx_advt_loop();
         Msg ->
             ?INFO("Unknown Advt received, so quitting: ~p", [Msg])

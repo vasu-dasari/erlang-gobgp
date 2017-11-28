@@ -3,15 +3,14 @@
 from mininet.topo import Topo
 from mininet.net import Mininet
 from mininet.node import Node, RemoteController, OVSKernelSwitch
-from mininet.log import setLogLevel, info
+from mininet.log import setLogLevel, info, debug
 from mininet.cli import CLI
-# from mininet.examples.linuxrouter import LinuxRouter
 import yaml
-import json, requests
+import requests
 import time, sys
 
 def configure_local_vtep(router_id):
-    info("Router id %s" % (router_id))
+    info("Router id %s\n" % (router_id))
 
     # Setting router id
     payload = dict(
@@ -23,24 +22,24 @@ def configure_local_vtep(router_id):
         url="http://localhost:8080/vtep/speakers",
         json=payload
     )
-    print(response.text)
+    debug(response.text)
 
-def configure_remote_vtep(neighbor_id):
-    info("Neighbor Id %s" % (neighbor_id))
+def configure_remote_vtep(neighbor_id, as_number):
+    info("Neighbor Id %s as_number %s\n" % (neighbor_id, as_number))
 
     # Setting neighbor id
     payload = dict(
         address=neighbor_id,
-        remote_as=65000
+        remote_as=as_number
     )
     response = requests.post(
         url="http://localhost:8080/vtep/neighbors",
         json=payload
     )
-    print(response.text)
+    debug(response.text)
 
 def configure_endport(port, vni, ip, mac):
-    info("Adding endpoint: Port %s VNI %s, IP %s, MAC %s" % (port, vni, ip, mac))
+    info("Adding endpoint: Port %s VNI %s, IP %s, MAC %s\n" % (port, vni, ip, mac))
 
     payload = dict(
         vni=vni
@@ -49,7 +48,7 @@ def configure_endport(port, vni, ip, mac):
         url="http://localhost:8080/vtep/networks",
         json=payload
     )
-    print(response.text)
+    debug(response.text)
 
     payload = dict(
         port=port,
@@ -60,7 +59,7 @@ def configure_endport(port, vni, ip, mac):
         url="http://localhost:8080/vtep/networks/" + `vni` + "/clients",
         json=payload
     )
-    print(response.text)
+    debug(response.text)
 
 class LinuxRouter( Node ):
     "A Node with IP forwarding enabled."
@@ -121,7 +120,9 @@ class NetworkTopo( Topo ):
 
     def ryu( self, net ):
       configure_local_vtep(router_id = self.vtep['local'])
-      configure_remote_vtep(neighbor_id = self.vtep['remote'])
+
+      neighbor_ip,as_number = self.vtep['remote'].split(":")
+      configure_remote_vtep(neighbor_ip, as_number)
 
       s1 = net.get('s1')
       for routerName, Intfs in self.config.items():

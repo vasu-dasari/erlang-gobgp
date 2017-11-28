@@ -7,11 +7,14 @@ services:
     hostname: erlang_gobgp
     volumes:
         - ${HOME}:${HOME}
+    privileged: true
     networks:
       default_net:
         ipv4_address: 10.0.123.10
       network_1:
-        ipv4_address: 10.0.124.30
+        ipv4_address: 10.0.100.1
+      network_2:
+        ipv4_address: 10.0.201.1
 
   gobgp_1:
     image: vdasari/erlango:latest
@@ -19,9 +22,14 @@ services:
     hostname: gobgp_1
     volumes:
         - ${HOME}:${HOME}
+    privileged: true
     networks:
       default_net:
         ipv4_address: 10.0.123.100
+      network_1:
+        ipv4_address: 10.0.100.2
+      network_3:
+        ipv4_address: 10.0.202.1
 
   gobgp_2:
     image: vdasari/erlango:latest
@@ -29,9 +37,12 @@ services:
     hostname: gobgp_2
     volumes:
         - ${HOME}:${HOME}
+    privileged: true
     networks:
       default_net:
         ipv4_address: 10.0.123.200
+      network_1:
+        ipv4_address: 10.0.100.3
 
   ryu1:
     image: vdasari/ovs-mn-ryu:latest
@@ -50,8 +61,8 @@ services:
     networks:
       default_net:
         ipv4_address: 10.0.123.20
-      network_1:
-        ipv4_address: 10.0.124.20
+      network_2:
+        ipv4_address: 10.0.201.2
 
   ryu2:
     image: vdasari/ovs-mn-ryu:latest
@@ -70,6 +81,8 @@ services:
     networks:
       default_net:
         ipv4_address: 10.0.123.30
+      network_3:
+        ipv4_address: 10.0.202.2
 
 networks:
   default_net:
@@ -78,11 +91,25 @@ networks:
       driver: default
       config:
       - subnet: 10.0.123.0/24
-        gateway: 10.0.123.1
+        gateway: 10.0.123.254
   network_1:
     driver: bridge
     ipam:
       driver: default
       config:
-      - subnet: 10.0.124.0/24
-        gateway: 10.0.124.1
+      - subnet: 10.0.100.0/24
+        gateway: 10.0.100.254
+  network_2:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+      - subnet: 10.0.201.0/24
+        gateway: 10.0.201.254
+  network_3:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+      - subnet: 10.0.202.0/24
+        gateway: 10.0.202.254

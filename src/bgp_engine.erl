@@ -177,7 +177,7 @@ process_info_msg(retry_connection, #state{ip_address = Ip, port_number = PortNum
 process_info_msg({'EXIT',_,closed_by_peer}, #state{connection_timer_ref = TimerRef} = State) ->
     {noreply, State#state{connection = not_connected, connection_timer_ref = bgp_utils:restart_timer(TimerRef)}};
 process_info_msg({_,{data,Message}}, State) ->
-    do_notify(Message),
+    do_notify(State#state.name, Message),
     {noreply, State};
 
 process_info_msg(Request, State) ->
@@ -278,17 +278,12 @@ do_neighbor(delete, Ip, AsNumber, _, #state{connection = not_connected} = State)
     ets:delete(?EtsConfig, #neighbor_key_t{ip_address = Ip, as_number = AsNumber}),
     {not_connected, State};
 do_neighbor(add, Ip, AsNumber, Family, #state{connection = Connection} = State) ->
-    [#router_id_t{router_id = RouterId}] = ets:lookup(?EtsConfig, router_id),
     Request = #'AddNeighborRequest'{
         peer = #'Peer'{
             families = [gobgp_pb:enum_value_by_symbol_Family(Family)],
             conf = #'PeerConf'{
                 neighbor_address = Ip,
                 peer_as = AsNumber
-            },
-            route_reflector = #'RouteReflector'{
-                route_reflector_client = 1,
-                route_reflector_cluster_id = RouterId
             }
         }
     },
@@ -368,7 +363,7 @@ do_status(State) ->
     _X = State,
     ok.
 
-do_notify(
+do_notify(Instance,
         #'Peer'{
             conf = #'PeerConf'{
                 neighbor_address = Ip
@@ -383,9 +378,9 @@ do_notify(
         admin_state = case AdminState of 'UP' -> up; 'DOWN' -> down end,
         oper_state = get_bgp_state(BgpState)
     },
-    do_announce(NeighborAdvt),
+    do_announce(Instance, NeighborAdvt),
     ?DEBUG("Neighbor announcement ~p", [NeighborAdvt]);
-do_notify(
+do_notify(Instance,
         #'Destination'{
             prefix = Prefix,
             paths = Paths
@@ -410,19 +405,19 @@ do_notify(
             extract_prefix_tuple(Tuple, Acc)
     end, #route_advt_t{paths = PathsAdvt}, string:tokens(binary_to_list(Prefix), "[]")),
 
-    do_announce(RouteAdvt),
+    do_announce(Instance, RouteAdvt),
 
     ?DEBUG("Route Announcement ~p", [RouteAdvt]),
     ok;
-do_notify(Msg) ->
+do_notify(_, Msg) ->
     ?INFO("Unknown notification ~p", [Msg]).
 
-do_announce(Advt) ->
+do_announce(Instance, Advt) ->
     case pg2:get_local_members(gobgp_advt) of
         {error, _} ->
             ok;
         Pids ->
-            [gen_server:cast(Pid, {?MODULE, gobgp_advt, Advt}) || Pid <- Pids]
+            [gen_server:cast(Pid, {gobgp_advt, Instance, Advt}) || Pid <- Pids]
     end.
 
 get_bgp_state(BgpState) ->
