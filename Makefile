@@ -57,7 +57,7 @@ else
 endif
 
 connect:
-	$(DOCKER) exec -it $(filter-out $@,$(MAKECMDGOALS))  bash -c "cd $(shell pwd)/docker && bash"
+	$(DOCKER) exec -it $(filter-out $@,$(MAKECMDGOALS))  bash -c "cd $(shell pwd)/scripts && bash"
 
 logs:
 	$(DOCKER) logs $(filter-out $@,$(MAKECMDGOALS)) --follow
