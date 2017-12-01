@@ -93,8 +93,8 @@ handle_call(Request, From, State) ->
     catch
         Error:Reason ->
             StackTrace = erlang:get_stacktrace(),
-            ?ERROR("Failed:~n    Request ~p~n    From ~p~n    Error ~p, Reason ~p~n    StackTrace ~n~s",
-                [Request, From, Error, Reason, bgp_utils:pretty_print(StackTrace)]),
+            ?ERROR("~p: Failed:~n    Request ~p~n    From ~p~n    Error ~p, Reason ~p~n    StackTrace ~n~s",
+                [State#state.name, Request, From, Error, Reason, bgp_utils:pretty_print(StackTrace)]),
             {reply, Error, State}
     end.
 
@@ -106,8 +106,8 @@ handle_cast(Request, State) ->
     catch
         Error:Reason ->
             StackTrace = erlang:get_stacktrace(),
-            ?ERROR("Failed:~n    Request ~p~n    Error ~p, Reason ~p~n    StackTrace ~n~s",
-                [Request, Error, Reason, bgp_utils:pretty_print(StackTrace)]),
+            ?ERROR("~p: Failed:~n    Request ~p~n    Error ~p, Reason ~p~n    StackTrace ~n~s",
+                [State#state.name, Request, Error, Reason, bgp_utils:pretty_print(StackTrace)]),
             {noreply, State}
     end.
 
@@ -119,8 +119,8 @@ handle_info(Info, State) ->
     catch
         Error:Reason ->
             StackTrace = erlang:get_stacktrace(),
-            ?ERROR("Failed:~n    Request ~p~n    Error ~p, Reason ~p~n    StackTrace ~n~s",
-                [Info, Error, Reason, bgp_utils:pretty_print(StackTrace)]),
+            ?ERROR("~p: Failed:~n    Request ~p~n    Error ~p, Reason ~p~n    StackTrace ~n~s",
+                [State#state.name, Info, Error, Reason, bgp_utils:pretty_print(StackTrace)]),
             {noreply, State}
     end.
 
@@ -151,8 +151,7 @@ process_call(Request, State) ->
     {reply, ok, State}.
 
 process_cast({route, Op, RouteEntry}, State) ->
-    Ret = do_route(Op, RouteEntry, State),
-    ?INFO("Ret ~p", [Ret]),
+    do_route(Op, RouteEntry, State),
     {noreply, State};
 process_cast(Request, State) ->
     ?INFO("cast: Request~n~p", [Request]),
@@ -176,10 +175,11 @@ process_info_msg(retry_connection, #state{ip_address = Ip, port_number = PortNum
 
 process_info_msg({'EXIT',_,closed_by_peer}, #state{connection_timer_ref = TimerRef} = State) ->
     {noreply, State#state{connection = not_connected, connection_timer_ref = bgp_utils:restart_timer(TimerRef)}};
-process_info_msg({_,{data,Message}}, State) ->
+process_info_msg({notification,{data,Message}}, State) ->
     do_notify(State#state.name, Message),
     {noreply, State};
-
+process_info_msg({notification,_}, State) ->
+    {noreply, State};
 process_info_msg(Request, State) ->
     ?INFO("info: Request~n~p", [Request]),
     {noreply, State}.
@@ -307,9 +307,8 @@ do_neighbor(delete, Ip, AsNumber, _,  #state{connection = Connection} = State) -
     {Result, State}.
 
 do_api(MethodName, Request, State) ->
-    {ok, #{result := Result}} = gobgp_client:MethodName(
-        State#state.connection, Request, [{msgs_as_records, gobgp_pb}]),
-    Result.
+    gobgp_client:MethodName(
+        State#state.connection, Request, [{msgs_as_records, gobgp_pb}]).
 
 make_ets_name(Name) when is_atom(Name) ->
     erlang:list_to_atom("bgp_" ++ erlang:atom_to_list(Name));
@@ -332,14 +331,39 @@ do_route(Op, RouteEntry, #state{connection = Connection}) ->
 
 route2nif(
         #route_entry_t{
-            type = macadv,
-            mac_address = Mac
-        } = E) ->
+            family = Family,
+            nexthop = Nexthop,
+            service_id = ServiceId,
+            rd = Rd,
+            rt = Rt,
+            encap = Encap
+        }) when Family /= 'EVPN' orelse
+    is_list(Nexthop) /= true orelse
+    is_integer(ServiceId) /= true orelse
+    is_list(Rd) /= true orelse
+    is_list(Rt) /= true orelse
+    Encap /= vxlan
+    ->
+    bad_args;
+route2nif(#route_entry_t{type = macadv, family = 'EVPN'} = E) ->
     NifStr =
-        io_lib:format("macadv ~s ~s ~p ~p rd ~s rt ~s encap ~p -a ~p", [
-            Mac,
+        io_lib:format("macadv ~s ~s ~p ~p rd ~s rt ~s encap ~p nexthop ~s -a ~p", [
+            E#route_entry_t.mac_address,
             E#route_entry_t.ip_address,
             E#route_entry_t.service_id,
+            E#route_entry_t.service_id,
+            E#route_entry_t.rd,
+            E#route_entry_t.rt,
+            E#route_entry_t.encap,
+            E#route_entry_t.nexthop,
+            E#route_entry_t.encap
+        ]),
+    ?DEBUG("NifStr ~s", [lists:flatten(NifStr)]),
+    {"l2vpn-evpn", lists:flatten(NifStr)};
+route2nif(#route_entry_t{type = multicast, family = 'EVPN'} = E) ->
+    NifStr =
+        io_lib:format("multicast ~s etag ~p rd ~s rt ~s encap ~p -a ~p", [
+            E#route_entry_t.nexthop,
             E#route_entry_t.service_id,
             E#route_entry_t.rd,
             E#route_entry_t.rt,

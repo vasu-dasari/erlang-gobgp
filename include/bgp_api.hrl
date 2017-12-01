@@ -19,6 +19,7 @@
     type            :: route_type(),
     family          :: gobgp_pb:'Family'(),
     asn             :: non_neg_integer(),
+    nexthop         :: ip_type(),
     ip_address      :: ip_type(),
     mac_address     :: mac_type(),
     service_id      :: non_neg_integer(),

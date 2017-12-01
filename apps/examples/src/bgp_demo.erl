@@ -14,7 +14,7 @@
 -include("gobgp_pb.hrl").
 
 %% API
--export([demo/0, control/0, refresh/0, route/1, handle_advts/0, vrf/1, gobgp1/0]).
+-export([demo/0, control/0, refresh/0, route/1, handle_advts/0, vrf/1, gobgp1/0, gobgp2/0, zebra/1]).
 
 -define(Control, "10.0.100.1").
 -define(GoBGP_1, "10.0.100.2").
@@ -85,6 +85,7 @@ gobgp1() ->
             }
         }),
     bgp_api:neighbor(RouterInstance, add, list_to_binary(?Control), ?Control_AS, 'EVPN'),
+    bgp_api:neighbor(RouterInstance, add, list_to_binary(?GoBGP_2), ?GoBGP_2_AS, 'EVPN'),
     ok.
 
 gobgp2() ->
@@ -94,6 +95,7 @@ gobgp2() ->
     bgp_api:router_id(RouterInstance, start, list_to_binary(?RouterId_GoBGP_2), ?GoBGP_2_AS),
 
     bgp_api:neighbor(RouterInstance, add, list_to_binary(?Control), ?Control_AS, 'EVPN'),
+    bgp_api:neighbor(RouterInstance, add, list_to_binary(?GoBGP_1), ?GoBGP_1_AS, 'EVPN'),
 
     ok.
 
@@ -102,8 +104,8 @@ refresh() ->
     bgp_api:neighbor({router, "10.0.124.30"}, add, list_to_binary("10.0.124.20"), 65000, 'EVPN').
 
 route(Op) ->
-    Container = "10.0.124.30",
-    bgp_api:route({router,Container}, Op,
+    RouterInstance = {router, gobgp2},
+    bgp_api:route(RouterInstance, Op,
         #route_entry_t{
             type = macadv,
             mac_address = "aa:bb:cc:dd:ee:04",
@@ -112,8 +114,21 @@ route(Op) ->
             rd = "65000:1000",
             rt = "65000:1000",
             encap = vxlan,
-            family = 'EVPN'
-        }).
+            family = 'EVPN',
+            nexthop = "10.0.203.2"
+        }),
+    bgp_api:route(RouterInstance, Op,
+        #route_entry_t{
+            type = multicast,
+            service_id = 1000,
+            rd = "65000:1000",
+            rt = "65000:1000",
+            encap = vxlan,
+            family = 'EVPN',
+            nexthop = "10.0.203.2"
+        }),
+
+    ok.
 
 vrf(Op) ->
     Vrf = #'Vrf'{
@@ -151,3 +166,12 @@ rx_advt_loop() ->
         Msg ->
             ?INFO("Unknown Advt received, so quitting: ~p", [Msg])
     end.
+
+zebra(Container) ->
+    RouterInstance = {router,Container},
+    bgp_api:api(RouterInstance, 'EnableZebra',
+        #'EnableZebraRequest'{
+            url = <<"unix:/var/run/quagga/zserv.api">>,
+            route_types = [<<"static">>, <<"connect">>]
+        }),
+    ok.

@@ -9,13 +9,14 @@ import yaml
 import requests
 import time, sys
 
-def configure_local_vtep(router_id):
-    info("Router id %s\n" % (router_id))
+
+def configure_local_vtep(router_id, as_number):
+    info("Router id %s, as_number %s\n" % (router_id, as_number))
 
     # Setting router id
     payload = dict(
         dpid="1",
-        as_number=65000,
+        as_number=as_number,
         router_id=router_id
     )
     response = requests.post(
@@ -86,8 +87,8 @@ class LinuxRouter( Node ):
         self.cmd( 'sysctl net.ipv4.ip_forward=1' )
 
         for intf,attrs in sorted(config.items()):
-          self.setIP( attrs['ip'], 24, intf )
-          self.setMAC( attrs['mac'], intf )
+            self.setIP( attrs['ip'], 24, intf )
+            self.setMAC( attrs['mac'], intf )
 
     def terminate( self ):
         self.cmd( 'sysctl net.ipv4.ip_forward=0' )
@@ -98,51 +99,52 @@ class NetworkTopo( Topo ):
 
     def yaml_config( self, ConfigFile ):
         with open(ConfigFile, 'r') as stream:
-          try:
-            self.config = (yaml.load(stream))
-          except yaml.YAMLError as exc:
-            print(exc)
+            try:
+                self.config = (yaml.load(stream))
+            except yaml.YAMLError as exc:
+                print(exc)
 
         s1 = self.addSwitch( 's1', cls=OVSKernelSwitch, dpid='0000000000000001')
 
         for key, value in self.config.items():
-          if key == 'vtep':
-            self.vtep = value
-            continue
+            if key == 'vtep':
+                self.vtep = value
+                continue
 
         # Remove vtep configuration from config data
         self.config.pop('vtep')
 
         for routerName, Intfs in self.config.items():
-          router = self.addNode( routerName, cls=LinuxRouter, ip=None, config=Intfs )
-          for intf,attrs in sorted(Intfs.items()):
-            self.addLink( s1, router, intfName2=intf )
+            router = self.addNode( routerName, cls=LinuxRouter, ip=None, config=Intfs )
+            for intf, attrs in sorted(Intfs.items()):
+                self.addLink( s1, router, intfName2=intf )
 
     def ryu( self, net ):
-      configure_local_vtep(router_id = self.vtep['local'])
+        router_ip, as_number = self.vtep['local'].split(":")
+        configure_local_vtep(router_ip, as_number)
 
-      neighbor_ip,as_number = self.vtep['remote'].split(":")
-      configure_remote_vtep(neighbor_ip, as_number)
+        neighbor_ip, as_number = self.vtep['remote'].split(":")
+        configure_remote_vtep(neighbor_ip, as_number)
 
-      s1 = net.get('s1')
-      for routerName, Intfs in self.config.items():
-        for intf,attrs in sorted(Intfs.items()):
-          ovs_if = "s1-%s" % intf
-          cmd = ("ovs-ofctl add-flow s1"
-                 "\"table=1,priority=1,metadata=%s,dl_dst=ff:ff:ff:ff:ff:ff actions=output:%d\"" %
-                 (attrs['vni'], (s1.ports[s1.intf(ovs_if)])))
-          s1.cmd(cmd)
-          configure_endport(
-            port=ovs_if,
-            vni=attrs['vni'],
-            ip=attrs['ip'],
-            mac=attrs['mac']
-        )
+        s1 = net.get('s1')
+        for routerName, Intfs in self.config.items():
+            for intf, attrs in sorted(Intfs.items()):
+                ovs_if = "s1-%s" % intf
+                cmd = ("ovs-ofctl add-flow s1"
+                    "\"table=1,priority=1,metadata=%s,dl_dst=ff:ff:ff:ff:ff:ff actions=output:%d\"" %
+                    (attrs['vni'], (s1.ports[s1.intf(ovs_if)])))
+                s1.cmd(cmd)
+                configure_endport(
+                        port=ovs_if,
+                        vni=attrs['vni'],
+                        ip=attrs['ip'],
+                        mac=attrs['mac']
+                )
 
     def build( self, yaml=None, **opts ):
         if yaml != None:
-          self.yaml_config(yaml)
-          return
+            self.yaml_config(yaml)
+            return
 
         router = self.addNode( 'r0', cls=LinuxRouter, ip=None )
         s1 = self.addSwitch( 's1', cls=OVSKernelSwitch, dpid='0000000000000001')
@@ -179,7 +181,7 @@ def main(argv):
     s1.cmd("ovs-vsctl set-manager ptcp:6640")
 
     info("ryu-manager should have started using command\n%s\n" %
-        "sudo ryu-manager ryu.app.rest_vtep ryu.app.ofctl_rest")
+         "sudo ryu-manager ryu.app.rest_vtep ryu.app.ofctl_rest")
 
     time.sleep(2)  # Give some time to have DPID discovered
 

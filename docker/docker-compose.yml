@@ -43,6 +43,8 @@ services:
         ipv4_address: 10.0.123.200
       network_1:
         ipv4_address: 10.0.100.3
+      network_4:
+        ipv4_address: 10.0.203.1
 
   ryu1:
     image: vdasari/ovs-mn-ryu:latest
@@ -113,3 +115,10 @@ networks:
       config:
       - subnet: 10.0.202.0/24
         gateway: 10.0.202.254
+  network_4:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+      - subnet: 10.0.203.0/24
+        gateway: 10.0.203.254

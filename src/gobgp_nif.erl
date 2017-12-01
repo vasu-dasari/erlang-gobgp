@@ -25,12 +25,16 @@ route_family(_) -> not_loaded(?LINE).
 route(_,_,_) -> not_loaded(?LINE).
 
 init() ->
-    {ok,LibFile} = application:get_env(?APPNAME, libgobgp),
-    case filelib:is_file(LibFile) of
-        true ->
-            ok;
+    LibFile = case application:get_env(?APPNAME, libgobgp) of
+        {ok,File} ->
+            case filelib:is_file(File) of
+                true ->
+                    File;
+                _ ->
+                    exit({not_loaded, [{module, ?MODULE}, {line, ?LINE}]})
+            end;
         _ ->
-            exit({not_loaded, [{module, ?MODULE}, {line, ?LINE}]})
+            []
     end,
     SoName = case code:priv_dir(?APPNAME) of
         {error, bad_name} ->
