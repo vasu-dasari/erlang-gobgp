@@ -6,7 +6,8 @@
     {applications, [
         kernel,
         stdlib,
-        lager
+        lager,
+        grpc_client
     ]},
     {env,[]},
     {modules, []},

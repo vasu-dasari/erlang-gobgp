@@ -146,6 +146,8 @@ process_call(status, State) ->
     do_status(State),
     {reply, ok, State};
 
+process_call(stop, State) ->
+    { stop, normal, stopping, State };
 process_call(Request, State) ->
     ?INFO("call: Unhandled Request ~p", [Request]),
     {reply, ok, State}.
@@ -166,14 +168,15 @@ process_info_msg({init},
         } = State) ->
     pg2:create(gobgp_advt),
     process_flag(trap_exit, true),
-    {_,NewState} = do_server(set, Ip, Port, State),
+    {_,NewState} = do_server(start, Ip, Port, State),
     {noreply, NewState};
 
 process_info_msg(retry_connection, #state{ip_address = Ip, port_number = PortNumer} = State) ->
-    {ok, NewState} = do_server(set, Ip, PortNumer, State),
+    {ok, NewState} = do_server(start, Ip, PortNumer, State),
     {noreply, NewState};
 
 process_info_msg({'EXIT',_,closed_by_peer}, #state{connection_timer_ref = TimerRef} = State) ->
+    do_announce(State#state.name, {router,stopped}),
     {noreply, State#state{connection = not_connected, connection_timer_ref = bgp_utils:restart_timer(TimerRef)}};
 process_info_msg({notification,{data,Message}}, State) ->
     do_notify(State#state.name, Message),
@@ -190,17 +193,18 @@ process_info_msg(Request, State) ->
 
 do_server(get, _, _, #state{ip_address = OldIp, port_number = OldPort, connection = Connection} = State) ->
     {{OldIp, OldPort, Connection}, State};
-do_server(set, Ip, PortNumer, #state{ip_address = OldIp, port_number = OldPort, connection = Connection} = State) when Ip == OldIp,PortNumer == OldPort,Connection /= not_connected->
+do_server(start, Ip, PortNumer, #state{ip_address = OldIp, port_number = OldPort, connection = Connection} = State) when Ip == OldIp,PortNumer == OldPort,Connection /= not_connected->
     {ok, State};
 
 do_server(Op, Ip, PortNumer, #state{connection = Connection} = State) when Connection /= not_connected ->
     grpc_client:stop_connection(Connection),
     do_server(Op, Ip,PortNumer,State#state{connection = not_connected});
 
-do_server(set, Ip, PortNumer, #state{connection_timer_ref = TimerRef} = State) ->
+do_server(start, Ip, PortNumer, #state{connection_timer_ref = TimerRef} = State) ->
     case grpc_client:connect(tcp, Ip, PortNumer) of
         {ok,Connection} ->
             gobgp_client:'StopServer'(Connection, #'StopServerRequest'{}, [{msgs_as_records,gobgp_pb}]),
+            do_announce(State#state.name, {router,started}),
             {ok, State#state{
                 ip_address = Ip, port_number = PortNumer, connection = Connection,
                 connection_timer_ref = bgp_utils:cancel_timer(TimerRef)}

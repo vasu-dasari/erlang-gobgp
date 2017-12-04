@@ -41,12 +41,10 @@ demo() ->
     ok.
 
 control() ->
-    RouterInstance = {router, control},
+    bgp_api:server(start),
+    bgp_api:router_id(start, list_to_binary(?RouterId_Control), ?Control_AS),
 
-    bgp_api:server(RouterInstance, set, ?Control, 50051),
-    bgp_api:router_id(RouterInstance, start, list_to_binary(?RouterId_Control), ?Control_AS),
-
-    bgp_api:api(RouterInstance, 'AddNeighbor',
+    bgp_api:api('AddNeighbor',
         #'AddNeighborRequest'{
             peer = #'Peer'{
                 families = [gobgp_pb:enum_value_by_symbol_Family('EVPN')],
@@ -60,14 +58,14 @@ control() ->
                 }
             }
         }),
-    bgp_api:neighbor(RouterInstance, add, list_to_binary(?GoBGP_1), ?GoBGP_1_AS, 'EVPN'),
-    bgp_api:neighbor(RouterInstance, add, list_to_binary(?GoBGP_2), ?GoBGP_2_AS, 'EVPN'),
+    bgp_api:neighbor(add, list_to_binary(?GoBGP_1), ?GoBGP_1_AS, 'EVPN'),
+    bgp_api:neighbor(add, list_to_binary(?GoBGP_2), ?GoBGP_2_AS, 'EVPN'),
     ok.
 
 gobgp1() ->
     RouterInstance = {router, gobgp1},
 
-    bgp_api:server(RouterInstance, set, ?GoBGP_1, 50051),
+    bgp_api:server(RouterInstance, start, ?GoBGP_1, 50051),
     bgp_api:router_id(RouterInstance, start, list_to_binary(?RouterId_GoBGP_1), ?GoBGP_1_AS),
 
     bgp_api:api(RouterInstance, 'AddNeighbor',
@@ -91,7 +89,7 @@ gobgp1() ->
 gobgp2() ->
     RouterInstance = {router, gobgp2},
 
-    bgp_api:server(RouterInstance, set, ?GoBGP_2, 50051),
+    bgp_api:server(RouterInstance, start, ?GoBGP_2, 50051),
     bgp_api:router_id(RouterInstance, start, list_to_binary(?RouterId_GoBGP_2), ?GoBGP_2_AS),
 
     bgp_api:neighbor(RouterInstance, add, list_to_binary(?Control), ?Control_AS, 'EVPN'),

@@ -20,6 +20,7 @@
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
+-export([server/1]).
 -export([server/3, router_id/3, neighbor/4, route/2, route_reflector/2, status/0, api/2]).
 -export([server/4, router_id/4, neighbor/5, route/3, route_reflector/3, status/1, api/3]).
 -export([]).
@@ -30,7 +31,7 @@
     ip_address = "localhost",
     port_number = 50051,
     connection = not_connected,
-    
+
     connection_timer_ref
 }).
 
@@ -51,18 +52,20 @@
 -define(dispatch_call(P, A),gen_server:call(pid(P), A)).
 -define(dispatch_cast(P, A),gen_server:cast(pid(P), A)).
 
+server(Op) ->
+    server(Op, "localhost", 50051).
 server(Op, Ip, Port) ->
-    server({router,"localhost"}, Op, Ip, Port).
+    server({router,localhost}, Op, Ip, Port).
 server({router, _} = RouterKey, Op, Ip, Port) ->
     ?call({server, RouterKey, Op, Ip, Port}).
 
 router_id(Op, RouterId, AsNumber) ->
-    router_id({router,"localhost"}, Op, RouterId, AsNumber).
+    router_id({router,localhost}, Op, RouterId, AsNumber).
 router_id({router,_} = RouterKey, Op, RouterId, AsNumber) ->
     ?dispatch_call(RouterKey, {router_id, Op, RouterId, AsNumber}).
 
 neighbor(Op, Ip, AsNumber, Family) ->
-    neighbor({router,"localhost"}, Op, Ip, AsNumber, Family).
+    neighbor({router,localhost}, Op, Ip, AsNumber, Family).
 neighbor({router,_} = RouterKey, Op, Ip, AsNumber, Family) ->
     ?dispatch_call(RouterKey, {neighbor, Op, Ip, AsNumber, Family}).
 
@@ -72,17 +75,17 @@ route_reflector({router,_}, _Op, _IpAddress) ->
     ok.
 
 route(Op, RouteEntry) ->
-    route({router,"localhost"}, Op, RouteEntry).
+    route({router,localhost}, Op, RouteEntry).
 route({router,_} = RouterKey, Op, RouteEntry) ->
     ?dispatch_cast(RouterKey, {route, Op, RouteEntry}).
 
 api(MethodName, Request) ->
-    api({router,"localhost"}, MethodName, Request).
+    api({router,localhost}, MethodName, Request).
 api({router,_} = RouterKey, MethodName, Request) ->
     ?dispatch_call(RouterKey, {api, MethodName, Request}).
 
 status() ->
-    status({router,"localhost"}).
+    status({router,localhost}).
 status({router,_} = RouterKey) ->
     ?dispatch_call(RouterKey, status).
 
@@ -154,7 +157,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-process_call({server, {router,Name} = RouterKey, set,Ip,PortNumer}= Request, State) ->
+process_call({server, {router,Name} = RouterKey, start,Ip,PortNumer}= Request, State) ->
     case ets:lookup(?EtsConfig, RouterKey) of
         [] ->
             ?INFO("Request ~p", [Request]),
@@ -169,7 +172,7 @@ process_call({server, {router,Name} = RouterKey, set,Ip,PortNumer}= Request, Sta
             ok
     end,
     {reply, ok, State};
-process_call({server, RouterKey, delete, _, _}, State) ->
+process_call({server, RouterKey, stop, _, _}, State) ->
     case ets:lookup(?EtsConfig, RouterKey) of
         [] ->
             ok;
