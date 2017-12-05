@@ -13,15 +13,23 @@ The goal of this library is to provide an abstraction to GoBGP by exposing gRPC 
 
 This project uses rebar3 framework, so this project can be included as a dependency to your project's rebar.config.
 
-    {deps, [
-        {gobgp, {git, "https://github.com/vasu-dasari/erlang-gobgp.git", {branch, "master"}}}
-    ]}.
+```erlang
+{deps, [
+    {gobgp, {git, "https://github.com/vasu-dasari/erlang-gobgp.git", {branch, "master"}}}
+]}.
+```
 
 Also, to be able add and delete routes, the software needs to have access to GoBGP's C-Shared library, libgobgp.so. The path to these files needs to be provided via _sys.config_ as follows:
 
-    {gobgp, [
-        {libgobgp,"/go/src/github.com/osrg/gobgp/gobgp/lib/"}
-    ]}
+```erlang
+{gobgp, [
+    {libgobgp,"/go/src/github.com/osrg/gobgp/gobgp/lib/"}
+]}
+```
+
+**Demo**
+
+There is an example [demo](https://github.com/vasu-dasari/erlang-gobgp/tree/master/apps/examples) to show a 3 node GoBGP routers interacting with a 2 Ryu based BGP nodes in the examples directory.
 
 **Development Environment**
 
@@ -93,9 +101,12 @@ pg2:join(gobgp_advt, self())
 As and when a neighbor state changes is learnt following message will be sent to the registered recievers
 
 ```erlang
-Source::Router which originates the message
-Msg::#neighbor_advt_t{} | #route_advt_t{}
 {'$gen_cast',{gobgp_advt, Source, Msg}}
+
+Where
+    Source::Router which originates the message
+    Msg::#neighbor_advt_t{} | #route_advt_t{}
+
 ```
 
 **BGP Controller**
@@ -107,6 +118,3 @@ bgp_api:server(RouterInstance, start, ?GoBGP_1, 50051),
 bgp_api:router_id(RouterInstance, start, list_to_binary(?RouterId_GoBGP_1), ?GoBGP_1_AS),
 bgp_api:neighbor(RouterInstance, add, list_to_binary(?Control), ?Control_AS, 'EVPN'),
 ```
-**Demo**
-
-There is an example [demo](https://github.com/vasu-dasari/erlang-gobgp/tree/master/apps/examples) to show a 3 node GoBGP routers interacting with a 2 Ryu based BGP nodes in the examples directory.

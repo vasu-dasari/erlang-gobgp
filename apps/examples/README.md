@@ -51,13 +51,13 @@ This function does the following:
 
  1. Registers to get notifications from all routers managed in this instance
  2. Starts "Control" router which is this router:
-	 3. Acts as router reflector for ryu1.
-	 4. Configures gobgp1 and gobgp2 as neighbors
+	 - Acts as router reflector for ryu1.
+	 - Configures gobgp1 and gobgp2 as neighbors
  3. Starts "gobgp1" router:
-	 4. Acts as router reflector for ryu2
-	 5. Configures control and gobgp2 as neighbors
+	 - Acts as router reflector for ryu2
+	 - Configures control and gobgp2 as neighbors
 4. Starts "gobgp2" router
-	5. Configure control and gobgp1 as neighbors
+	- Configure control and gobgp1 as neighbors
 
 Once this is done, we should be seeing the neighbor and route advertisements captured in log file:
 ```erlang
