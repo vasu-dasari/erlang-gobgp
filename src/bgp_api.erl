@@ -14,6 +14,7 @@
 
 -include("logger.hrl").
 -include("gobgp_pb.hrl").
+-include("bgp_api.hrl").
 
 %% API
 -export([start_link/0]).
@@ -21,8 +22,8 @@
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 -export([server/1]).
--export([server/3, router_id/3, neighbor/4, route/2, route_reflector/2, status/0, api/2]).
--export([server/4, router_id/4, neighbor/5, route/3, route_reflector/3, status/1, api/3]).
+-export([server/3, router_id/3, neighbor/4, route/2, status/0, api/2]).
+-export([server/4, router_id/4, neighbor/5, route/3, status/1, api/3]).
 -export([]).
 -define(SERVER, ?MODULE).
 -define(EtsConfig, bgp_sessions_ets).
@@ -52,15 +53,26 @@
 -define(dispatch_call(P, A),gen_server:call(pid(P), A)).
 -define(dispatch_cast(P, A),gen_server:cast(pid(P), A)).
 
+-type router_key()  :: {router,atom()|iolist()}.
+
+-spec server(Op::start|stop) -> {ok} | {error, Reason::term()}.
 server(Op) ->
     server(Op, "localhost", 50051).
+-spec server(Op::start|stop, Ip::ip_type(), Port::non_neg_integer()) ->
+    {ok} | {error, Reason::term()}.
 server(Op, Ip, Port) ->
     server({router,localhost}, Op, Ip, Port).
+-spec server(RouterKey::router_key(), Op::start|stop, Ip::ip_type(), Port::non_neg_integer()) ->
+    {ok} | {error, Reason::term()}.
 server({router, _} = RouterKey, Op, Ip, Port) ->
     ?call({server, RouterKey, Op, Ip, Port}).
 
+-spec router_id(Op::start|stop, RouterId::ip_type(), AsNumber::non_neg_integer()) ->
+    {ok} | {error, Reason::term()}.
 router_id(Op, RouterId, AsNumber) ->
     router_id({router,localhost}, Op, RouterId, AsNumber).
+-spec router_id(RouterKey::router_key(), Op::start|stop, RouterId::ip_type(), AsNumber::non_neg_integer()) ->
+    {ok} | {error, Reason::term()}.
 router_id({router,_} = RouterKey, Op, RouterId, AsNumber) ->
     ?dispatch_call(RouterKey, {router_id, Op, RouterId, AsNumber}).
 
@@ -69,18 +81,15 @@ neighbor(Op, Ip, AsNumber, Family) ->
 neighbor({router,_} = RouterKey, Op, Ip, AsNumber, Family) ->
     ?dispatch_call(RouterKey, {neighbor, Op, Ip, AsNumber, Family}).
 
-route_reflector(_Op, _IpAddress) ->
-    ok.
-route_reflector({router,_}, _Op, _IpAddress) ->
-    ok.
-
 route(Op, RouteEntry) ->
     route({router,localhost}, Op, RouteEntry).
 route({router,_} = RouterKey, Op, RouteEntry) ->
     ?dispatch_cast(RouterKey, {route, Op, RouteEntry}).
 
+-spec api(MethodName::atom, Request::tuple()) -> map().
 api(MethodName, Request) ->
     api({router,localhost}, MethodName, Request).
+-spec api(RouterKey::router_key(), MethodName::atom, Request::tuple()) -> map().
 api({router,_} = RouterKey, MethodName, Request) ->
     ?dispatch_call(RouterKey, {api, MethodName, Request}).
 

@@ -25,6 +25,7 @@ def configure_local_vtep(router_id, as_number):
     )
     debug(response.text)
 
+
 def configure_remote_vtep(neighbor_id, as_number):
     info("Neighbor Id %s as_number %s\n" % (neighbor_id, as_number))
 
@@ -38,6 +39,7 @@ def configure_remote_vtep(neighbor_id, as_number):
         json=payload
     )
     debug(response.text)
+
 
 def configure_endport(port, vni, ip, mac):
     info("Adding endpoint: Port %s VNI %s, IP %s, MAC %s\n" % (port, vni, ip, mac))
@@ -61,6 +63,7 @@ def configure_endport(port, vni, ip, mac):
         json=payload
     )
     debug(response.text)
+
 
 class LinuxRouter( Node ):
     "A Node with IP forwarding enabled."
@@ -93,6 +96,7 @@ class LinuxRouter( Node ):
     def terminate( self ):
         self.cmd( 'sysctl net.ipv4.ip_forward=0' )
         super( LinuxRouter, self ).terminate()
+
 
 class NetworkTopo( Topo ):
     "A LinuxRouter connecting three IP subnets"
@@ -155,6 +159,7 @@ class NetworkTopo( Topo ):
         self.addLink( s1, router, intfName2='r0-eth4', addr2='00:00:14:00:02:fe' )
         self.addLink( s1, router, intfName2='r0-eth5', addr2='00:00:1E:00:01:fe' )
 
+
 def run():
     "Test linux router"
     topo = NetworkTopo()
@@ -168,6 +173,7 @@ def run():
     info( net[ 'r0' ].cmd( 'route' ) )
     CLI( net )
     net.stop()
+
 
 def main(argv):
     info("Starting topology from %s\n" % argv[0])
@@ -189,6 +195,7 @@ def main(argv):
 
     CLI( net )
     net.stop()
+
 
 if __name__ == '__main__':
     setLogLevel( 'info' )
